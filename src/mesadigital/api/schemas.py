@@ -84,12 +84,14 @@ class DinerRead(BaseModel):
 class CategoryCreate(BaseModel):
     restaurant_id: int
     name: str
-    sort_order: int = 0
+    is_visible: bool = True
+    display_order: int = 0
 
 
 class CategoryUpdate(BaseModel):
     name: str | None = None
-    sort_order: int | None = None
+    is_visible: bool | None = None
+    display_order: int | None = None
 
 
 class CategoryRead(BaseModel):
@@ -98,7 +100,8 @@ class CategoryRead(BaseModel):
     id: int
     restaurant_id: int
     name: str
-    sort_order: int
+    is_visible: bool
+    display_order: int
 
 
 # ── MenuItem ──────────────────────────────────────────────────────────────────
@@ -110,14 +113,16 @@ class MenuItemCreate(BaseModel):
     name: str
     description: str | None = None
     price_cents: Annotated[int, Field(gt=0)]
-    available: bool = True
+    is_available: bool = True
+    display_order: int = 0
 
 
 class MenuItemUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     price_cents: Annotated[int, Field(gt=0)] | None = None
-    available: bool | None = None
+    is_available: bool | None = None
+    display_order: int | None = None
 
 
 class MenuItemRead(BaseModel):
@@ -129,7 +134,8 @@ class MenuItemRead(BaseModel):
     name: str
     description: str | None
     price_cents: int
-    available: bool
+    is_available: bool
+    display_order: int
 
 
 # ── Table ─────────────────────────────────────────────────────────────────────

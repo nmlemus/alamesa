@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -51,7 +52,7 @@ class Restaurant(Base):
 
 class RestaurantUser(Base):
     __tablename__ = "restaurant_users"
-    __table_args__ = (UniqueConstraint("restaurant_id", "email"),)
+    __table_args__ = (UniqueConstraint("restaurant_id", "email", name="uq_restaurant_users_restaurant_id_email"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     restaurant_id: Mapped[str] = mapped_column(
@@ -74,7 +75,7 @@ class RestaurantUser(Base):
 
 class Diner(Base):
     __tablename__ = "diners"
-    __table_args__ = (UniqueConstraint("restaurant_id", "phone"),)
+    __table_args__ = (UniqueConstraint("restaurant_id", "phone", name="uq_diners_restaurant_id_phone"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     restaurant_id: Mapped[str] = mapped_column(
@@ -96,13 +97,17 @@ class Diner(Base):
 
 class Category(Base):
     __tablename__ = "categories"
+    __table_args__ = (
+        Index("ix_categories_restaurant_visible_order", "restaurant_id", "is_visible", "display_order"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     restaurant_id: Mapped[str] = mapped_column(
         ForeignKey("restaurants.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -116,6 +121,9 @@ class Category(Base):
 
 class MenuItem(Base):
     __tablename__ = "menu_items"
+    __table_args__ = (
+        Index("ix_menu_items_restaurant_available_cat_order", "restaurant_id", "is_available", "category_id", "display_order"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     restaurant_id: Mapped[str] = mapped_column(
@@ -127,7 +135,8 @@ class MenuItem(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
-    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -142,7 +151,7 @@ class MenuItem(Base):
 
 class RestaurantTable(Base):
     __tablename__ = "tables"
-    __table_args__ = (UniqueConstraint("restaurant_id", "number"),)
+    __table_args__ = (UniqueConstraint("restaurant_id", "number", name="uq_tables_restaurant_id_number"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     restaurant_id: Mapped[str] = mapped_column(
@@ -171,6 +180,8 @@ class Order(Base):
             f"status IN ({_ORDER_STATUS_CHECK})",
             name="ck_orders_status",
         ),
+        Index("ix_orders_restaurant_status_created", "restaurant_id", "status", "created_at"),
+        Index("ix_orders_restaurant_updated", "restaurant_id", "updated_at"),
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
@@ -221,6 +232,9 @@ class OrderItem(Base):
 
 class OrderEvent(Base):
     __tablename__ = "order_events"
+    __table_args__ = (
+        Index("ix_order_events_order_created", "order_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), nullable=False)
