@@ -63,6 +63,7 @@ class RestaurantUser(Base):
     role: Mapped[RestaurantUserRole] = mapped_column(
         SAEnum(RestaurantUserRole, native_enum=False), nullable=False
     )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

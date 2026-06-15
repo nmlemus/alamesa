@@ -11,7 +11,6 @@ Creates:
 
 Safe to run multiple times (idempotent via existence checks).
 """
-import hashlib
 import os
 import sys
 from pathlib import Path
@@ -32,12 +31,9 @@ from mesadigital.api.db.models import (
     RestaurantUser,
     RestaurantUserRole,
 )
+from mesadigital.api.security import hash_password
 
 DB_URL = os.environ.get("DATABASE_URL", "sqlite:///dev.db")
-
-
-def _hash(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
 
 
 def seed(session: Session) -> None:
@@ -61,8 +57,9 @@ def seed(session: Session) -> None:
         admin = RestaurantUser(
             restaurant_id=restaurant.id,
             email=admin_email,
-            hashed_password=_hash("demo1234"),
+            hashed_password=hash_password("demo1234"),
             role=RestaurantUserRole.ADMIN,
+            is_active=True,
         )
         session.add(admin)
         session.flush()

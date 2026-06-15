@@ -1,11 +1,18 @@
 from collections.abc import Generator
 from unittest.mock import MagicMock
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
+from mesadigital.api.db.models import Restaurant, RestaurantUser
 from mesadigital.api.db.session import get_db
 from mesadigital.api.main import app
+from mesadigital.api.security import hash_password
+from mesadigital.api.settings import settings
 
 
 def test_health(client: TestClient) -> None:
@@ -167,3 +174,61 @@ def test_invalid_status_value(seeded_client: TestClient) -> None:
 def test_order_not_found(seeded_client: TestClient) -> None:
     r = seeded_client.patch("/api/orders/9999/status", json={"status": "confirmed"})
     assert r.status_code == 404
+
+
+# ── POST /api/auth/login ──────────────────────────────────────────────────────
+
+
+def test_staff_login_valid(seeded_client: TestClient) -> None:
+    r = seeded_client.post(
+        "/api/auth/login",
+        json={"email": "admin@demo.mesadigital.io", "password": "demo1234"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["token_type"] == "bearer"
+    claims = jwt.decode(data["access_token"], settings.SECRET_KEY, algorithms=["HS256"])
+    assert "sub" in claims
+    assert "restaurant_id" in claims
+    assert "role" in claims
+
+
+def test_staff_login_wrong_password(seeded_client: TestClient) -> None:
+    r = seeded_client.post(
+        "/api/auth/login",
+        json={"email": "admin@demo.mesadigital.io", "password": "wrongpass"},
+    )
+    assert r.status_code == 401
+
+
+def test_staff_login_wrong_email(seeded_client: TestClient) -> None:
+    r = seeded_client.post(
+        "/api/auth/login",
+        json={"email": "nobody@example.com", "password": "demo1234"},
+    )
+    assert r.status_code == 401
+
+
+def test_staff_login_missing_fields(client: TestClient) -> None:
+    r = client.post("/api/auth/login", json={"email": "x@x.com"})
+    assert r.status_code == 422
+
+
+def test_staff_login_inactive_user(seeded_client: TestClient, db_engine: Engine) -> None:
+    with Session(db_engine) as session:
+        restaurant = session.scalar(select(Restaurant).where(Restaurant.slug == "demo"))
+        session.add(
+            RestaurantUser(
+                restaurant_id=restaurant.id,
+                email="inactive@demo.mesadigital.io",
+                hashed_password=hash_password("password"),
+                role="staff",
+                is_active=False,
+            )
+        )
+        session.commit()
+    r = seeded_client.post(
+        "/api/auth/login",
+        json={"email": "inactive@demo.mesadigital.io", "password": "password"},
+    )
+    assert r.status_code == 401
