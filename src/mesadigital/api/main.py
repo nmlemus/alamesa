@@ -138,14 +138,14 @@ def get_menu(slug: str, db: DbDep) -> MenuResponse:
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
     categories_out: list[CategoryOut] = []
-    for cat in sorted(restaurant.categories, key=lambda c: c.sort_order):
+    for cat in sorted(restaurant.categories, key=lambda c: c.display_order):
         items_out = [
             MenuItemOut(
                 id=item.id,
                 name=item.name,
                 description=item.description,
                 price_cents=item.price_cents,
-                available=item.available,
+                available=item.is_available,
             )
             for item in cat.menu_items
         ]

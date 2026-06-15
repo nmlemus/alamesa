@@ -79,7 +79,7 @@ def seed(session: Session) -> None:
         )
         if cat is None:
             cat = Category(
-                restaurant_id=restaurant.id, name=cat_name, sort_order=i
+                restaurant_id=restaurant.id, name=cat_name, display_order=i
             )
             session.add(cat)
             session.flush()
@@ -108,7 +108,7 @@ def seed(session: Session) -> None:
                     name=name,
                     description=desc,
                     price_cents=price_cents,
-                    available=True,
+                    is_available=True,
                 )
             )
         else:
