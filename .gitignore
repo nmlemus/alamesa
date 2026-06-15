@@ -23,3 +23,6 @@ env/
 # IDE
 .idea/
 .vscode/
+
+# Node / pnpm
+node_modules/
