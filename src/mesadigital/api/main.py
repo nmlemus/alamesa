@@ -14,10 +14,10 @@ from mesadigital.api.db.models import (
     MenuItem,
     Order,
     OrderItem,
-    OrderStatus,
     Restaurant,
     RestaurantTable,
 )
+from shared.contracts import LEGAL_TRANSITIONS, OrderStatus
 
 app = FastAPI(title="Mesa Digital API")
 
@@ -32,31 +32,25 @@ def get_db() -> Generator[Session, None, None]:
 
 DbDep = Annotated[Session, Depends(get_db)]
 
-VALID_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
-    OrderStatus.PENDING: {OrderStatus.CONFIRMED},
-    OrderStatus.CONFIRMED: {OrderStatus.READY},
-    OrderStatus.READY: {OrderStatus.CLOSED},
-    OrderStatus.CLOSED: set(),
-}
-
 
 # ── Request / response schemas ─────────────────────────────────────────────
 
 
 class DinerRegisterRequest(BaseModel):
-    email: str
+    restaurant_slug: str
+    phone: str
     name: str
     password: str
 
 
 class DinerResponse(BaseModel):
-    id: int
-    email: str
+    id: str
+    phone: str
     name: str
 
 
 class MenuItemOut(BaseModel):
-    id: int
+    id: str
     name: str
     description: str | None
     price_cents: int
@@ -64,19 +58,19 @@ class MenuItemOut(BaseModel):
 
 
 class CategoryOut(BaseModel):
-    id: int
+    id: str
     name: str
     items: list[MenuItemOut]
 
 
 class TableOut(BaseModel):
-    id: int
+    id: str
     number: int
     label: str | None
 
 
 class RestaurantOut(BaseModel):
-    id: int
+    id: str
     slug: str
     name: str
 
@@ -88,22 +82,22 @@ class MenuResponse(BaseModel):
 
 
 class OrderItemRequest(BaseModel):
-    menu_item_id: int
+    menu_item_id: str
     quantity: int
 
 
 class CreateOrderRequest(BaseModel):
     restaurant_slug: str
-    table_id: int
-    diner_id: int | None = None
+    table_id: str
+    diner_id: str | None = None
     items: list[OrderItemRequest]
 
 
 class OrderResponse(BaseModel):
-    id: int
+    id: str
     status: str
-    table_id: int
-    restaurant_id: int
+    table_id: str
+    restaurant_id: str
 
 
 class UpdateStatusRequest(BaseModel):
@@ -120,18 +114,31 @@ def health() -> dict[str, str]:
 
 @app.post("/api/diners/register", response_model=DinerResponse, status_code=201)
 def register_diner(body: DinerRegisterRequest, db: DbDep) -> DinerResponse:
-    existing = db.scalar(select(Diner).where(Diner.email == body.email))
+    restaurant = db.scalar(
+        select(Restaurant).where(Restaurant.slug == body.restaurant_slug)
+    )
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    existing = db.scalar(
+        select(Diner).where(
+            Diner.restaurant_id == restaurant.id,
+            Diner.phone == body.phone,
+        )
+    )
     if existing is not None:
-        raise HTTPException(status_code=409, detail="Email already registered")
+        raise HTTPException(status_code=409, detail="Phone already registered")
+
     diner = Diner(
-        email=body.email,
+        restaurant_id=restaurant.id,
+        phone=body.phone,
         name=body.name,
-        password_hash=hashlib.sha256(body.password.encode()).hexdigest(),
+        hashed_password=hashlib.sha256(body.password.encode()).hexdigest(),
     )
     db.add(diner)
     db.commit()
     db.refresh(diner)
-    return DinerResponse(id=diner.id, email=diner.email, name=diner.name)
+    return DinerResponse(id=diner.id, phone=diner.phone, name=diner.name)
 
 
 @app.get("/api/restaurants/{slug}/menu", response_model=MenuResponse)
@@ -221,7 +228,7 @@ def create_order(body: CreateOrderRequest, db: DbDep) -> OrderResponse:
     db.refresh(order)
     return OrderResponse(
         id=order.id,
-        status=order.status.value,
+        status=str(order.status),
         table_id=order.table_id,
         restaurant_id=order.restaurant_id,
     )
@@ -229,7 +236,7 @@ def create_order(body: CreateOrderRequest, db: DbDep) -> OrderResponse:
 
 @app.patch("/api/orders/{order_id}/status", response_model=OrderResponse)
 def update_order_status(
-    order_id: int, body: UpdateStatusRequest, db: DbDep
+    order_id: str, body: UpdateStatusRequest, db: DbDep
 ) -> OrderResponse:
     try:
         new_status = OrderStatus(body.status)
@@ -240,12 +247,12 @@ def update_order_status(
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    allowed = VALID_TRANSITIONS.get(order.status, set())
+    allowed = LEGAL_TRANSITIONS.get(OrderStatus(str(order.status)), set())
     if new_status not in allowed:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Cannot transition from {order.status.value!r} "
+                f"Cannot transition from {str(order.status)!r} "
                 f"to {new_status.value!r}"
             ),
         )
@@ -255,7 +262,7 @@ def update_order_status(
     db.refresh(order)
     return OrderResponse(
         id=order.id,
-        status=order.status.value,
+        status=str(order.status),
         table_id=order.table_id,
         restaurant_id=order.restaurant_id,
     )
