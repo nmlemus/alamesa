@@ -24,7 +24,7 @@ class RestaurantUpdate(BaseModel):
 class RestaurantRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: str
     slug: str
     name: str
 
@@ -33,7 +33,7 @@ class RestaurantRead(BaseModel):
 
 
 class RestaurantUserCreate(BaseModel):
-    restaurant_id: int
+    restaurant_id: str
     email: str
     password: str
     role: RestaurantUserRole
@@ -59,13 +59,13 @@ class RestaurantUserRead(BaseModel):
 
 
 class DinerCreate(BaseModel):
-    email: str
+    phone: str
     name: str
     password: str
 
 
 class DinerUpdate(BaseModel):
-    email: str | None = None
+    phone: str | None = None
     name: str | None = None
     password: str | None = None
 
@@ -82,7 +82,7 @@ class DinerRead(BaseModel):
 
 
 class CategoryCreate(BaseModel):
-    restaurant_id: int
+    restaurant_id: str
     name: str
     is_visible: bool = True
     display_order: int = 0
@@ -97,8 +97,8 @@ class CategoryUpdate(BaseModel):
 class CategoryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    restaurant_id: int
+    id: str
+    restaurant_id: str
     name: str
     is_visible: bool
     display_order: int
@@ -108,8 +108,8 @@ class CategoryRead(BaseModel):
 
 
 class MenuItemCreate(BaseModel):
-    restaurant_id: int
-    category_id: int
+    restaurant_id: str
+    category_id: str
     name: str
     description: str | None = None
     price_cents: Annotated[int, Field(gt=0)]
@@ -128,9 +128,9 @@ class MenuItemUpdate(BaseModel):
 class MenuItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    restaurant_id: int
-    category_id: int
+    id: str
+    restaurant_id: str
+    category_id: str
     name: str
     description: str | None
     price_cents: int
@@ -142,7 +142,7 @@ class MenuItemRead(BaseModel):
 
 
 class TableCreate(BaseModel):
-    restaurant_id: int
+    restaurant_id: str
     number: int
     label: str | None = None
 
@@ -155,8 +155,8 @@ class TableUpdate(BaseModel):
 class TableRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    restaurant_id: int
+    id: str
+    restaurant_id: str
     number: int
     label: str | None
     qr_url: str
@@ -189,8 +189,8 @@ class OrderCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     restaurant_slug: str
-    table_id: int
-    diner_id: int | None = None
+    table_id: str
+    diner_id: str | None = None
     items: list[OrderItemInput]
     # status intentionally absent (structural field-level security)
 
@@ -198,18 +198,18 @@ class OrderCreate(BaseModel):
 class OrderUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    table_id: int | None = None
-    diner_id: int | None = None
+    table_id: str | None = None
+    diner_id: str | None = None
     # status intentionally absent (structural field-level security)
 
 
 class OrderRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    restaurant_id: int
-    table_id: int
-    diner_id: int | None
+    id: str
+    restaurant_id: str
+    table_id: str
+    diner_id: str | None
     status: OrderStatus
     created_at: datetime
 
@@ -220,8 +220,8 @@ class OrderRead(BaseModel):
 class OrderItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    order_id: int
-    menu_item_id: int
+    id: str
+    order_id: str
+    menu_item_id: str
     quantity: int
     unit_price_cents: int

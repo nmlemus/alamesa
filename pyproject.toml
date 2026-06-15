@@ -33,7 +33,7 @@ dev = [
 mesadigital-api = "mesadigital.api.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mesadigital"]
+packages = ["src/mesadigital", "shared"]
 
 [tool.ruff]
 line-length = 88
