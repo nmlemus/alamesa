@@ -102,6 +102,7 @@ class CategoryRead(BaseModel):
     name: str
     is_visible: bool
     display_order: int
+    items: list[MenuItemRead] = []
 
 
 # ── MenuItem ──────────────────────────────────────────────────────────────────

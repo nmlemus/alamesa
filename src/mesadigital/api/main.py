@@ -8,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from mesadigital.api.db.models import (
+    Category,
     Diner,
     MenuItem,
     Order,
@@ -20,6 +21,7 @@ from mesadigital.api.db.models import (
     RestaurantUser,
 )
 from mesadigital.api.db.session import get_db
+from mesadigital.api.schemas import CategoryRead, MenuItemRead, RestaurantRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderStatus
@@ -204,6 +206,70 @@ def public_register_diner(
         content={"access_token": token, "token_type": "bearer"},
         status_code=http_status,
     )
+
+
+@api_router.get("/public/restaurants/{slug}", response_model=RestaurantRead)
+def get_public_restaurant(slug: str, db: DbDep) -> RestaurantRead:
+    restaurant = db.scalar(
+        select(Restaurant).where(
+            Restaurant.slug == slug,
+            Restaurant.is_active == True,  # noqa: E712
+        )
+    )
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    return RestaurantRead.model_validate(restaurant)
+
+
+@api_router.get("/public/restaurants/{slug}/menu", response_model=list[CategoryRead])
+def get_public_menu(slug: str, db: DbDep) -> list[CategoryRead]:
+    restaurant = db.scalar(
+        select(Restaurant).where(
+            Restaurant.slug == slug,
+            Restaurant.is_active == True,  # noqa: E712
+        )
+    )
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    stmt = (
+        select(Category)
+        .outerjoin(
+            MenuItem,
+            (MenuItem.category_id == Category.id) & (MenuItem.is_available == True),  # noqa: E712
+        )
+        .where(
+            Category.restaurant_id == restaurant.id,
+            Category.is_visible == True,  # noqa: E712
+        )
+        .order_by(Category.display_order, MenuItem.display_order)
+        .options(contains_eager(Category.menu_items))
+    )
+    categories = db.scalars(stmt).unique().all()
+
+    return [
+        CategoryRead(
+            id=cat.id,
+            restaurant_id=cat.restaurant_id,
+            name=cat.name,
+            is_visible=cat.is_visible,
+            display_order=cat.display_order,
+            items=[
+                MenuItemRead(
+                    id=item.id,
+                    restaurant_id=item.restaurant_id,
+                    category_id=item.category_id,
+                    name=item.name,
+                    description=item.description,
+                    price_cents=item.price_cents,
+                    is_available=item.is_available,
+                    display_order=item.display_order,
+                )
+                for item in sorted(cat.menu_items, key=lambda i: i.display_order)
+            ],
+        )
+        for cat in categories
+    ]
 
 
 @api_router.post("/diners/register", response_model=DinerResponse, status_code=201)
