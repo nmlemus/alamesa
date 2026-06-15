@@ -107,6 +107,10 @@ jobs:
 
       - name: Build
         run: pnpm --filter diner-app build && pnpm --filter ops-dashboard build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
   # ── Docker build + staging deploy (main branch only) ──────────────────────
 
