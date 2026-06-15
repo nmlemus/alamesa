@@ -1,10 +1,12 @@
 import hashlib
+from collections.abc import Generator
 from typing import Annotated
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from mesadigital.api.db.models import (
@@ -16,9 +18,8 @@ from mesadigital.api.db.models import (
     RestaurantTable,
 )
 from mesadigital.api.db.session import get_db
+from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderStatus
-
-app = FastAPI(title="Mesa Digital API")
 
 DbDep = Annotated[Session, Depends(get_db)]
 
@@ -94,15 +95,21 @@ class UpdateStatusRequest(BaseModel):
     status: str
 
 
-# ── Routes ────────────────────────────────────────────────────────────────
+# ── API Router ────────────────────────────────────────────────────────────
+
+api_router = APIRouter()
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+@api_router.get("/healthz")
+def healthz(db: DbDep) -> dict[str, str]:
+    try:
+        db.execute(text("SELECT 1"))
+        return {"db": "ok"}
+    except Exception:
+        raise HTTPException(status_code=503, detail={"db": "error"})
 
 
-@app.post("/api/diners/register", response_model=DinerResponse, status_code=201)
+@api_router.post("/diners/register", response_model=DinerResponse, status_code=201)
 def register_diner(body: DinerRegisterRequest, db: DbDep) -> DinerResponse:
     restaurant = db.scalar(
         select(Restaurant).where(Restaurant.slug == body.restaurant_slug)
@@ -131,7 +138,7 @@ def register_diner(body: DinerRegisterRequest, db: DbDep) -> DinerResponse:
     return DinerResponse(id=diner.id, phone=diner.phone, name=diner.name)
 
 
-@app.get("/api/restaurants/{slug}/menu", response_model=MenuResponse)
+@api_router.get("/restaurants/{slug}/menu", response_model=MenuResponse)
 def get_menu(slug: str, db: DbDep) -> MenuResponse:
     restaurant = db.scalar(select(Restaurant).where(Restaurant.slug == slug))
     if restaurant is None:
@@ -167,7 +174,7 @@ def get_menu(slug: str, db: DbDep) -> MenuResponse:
     )
 
 
-@app.post("/api/orders", response_model=OrderResponse, status_code=201)
+@api_router.post("/orders", response_model=OrderResponse, status_code=201)
 def create_order(body: CreateOrderRequest, db: DbDep) -> OrderResponse:
     restaurant = db.scalar(
         select(Restaurant).where(Restaurant.slug == body.restaurant_slug)
@@ -224,7 +231,7 @@ def create_order(body: CreateOrderRequest, db: DbDep) -> OrderResponse:
     )
 
 
-@app.patch("/api/orders/{order_id}/status", response_model=OrderResponse)
+@api_router.patch("/orders/{order_id}/status", response_model=OrderResponse)
 def update_order_status(
     order_id: str, body: UpdateStatusRequest, db: DbDep
 ) -> OrderResponse:
@@ -256,6 +263,43 @@ def update_order_status(
         table_id=order.table_id,
         restaurant_id=order.restaurant_id,
     )
+
+
+# ── App factory ────────────────────────────────────────────────────────────
+
+
+def create_app(cfg: Settings | None = None) -> FastAPI:
+    if cfg is None:
+        cfg = default_settings
+
+    if "postgresql" in cfg.DATABASE_URL and cfg.SECRET_KEY == "dev-secret-change-in-prod":
+        raise RuntimeError(
+            "SECRET_KEY must be changed from the default value before using PostgreSQL"
+        )
+
+    if cfg.ENVIRONMENT == "prod" and "*" in cfg.CORS_ORIGINS:
+        raise ValueError("Wildcard CORS origin '*' is not allowed in production")
+
+    application = FastAPI(title="Mesa Digital API")
+
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=cfg.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    application.include_router(api_router, prefix="/api")
+
+    @application.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return application
+
+
+app = create_app()
 
 
 def main() -> None:

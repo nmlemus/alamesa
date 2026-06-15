@@ -3,7 +3,7 @@ from collections.abc import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from mesadigital.api import settings
+from mesadigital.api.settings import settings
 
 _connect_args: dict[str, object] = (
     {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}

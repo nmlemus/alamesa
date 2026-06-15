@@ -1,10 +1,38 @@
+from collections.abc import Generator
+from unittest.mock import MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
+
+from mesadigital.api.db.session import get_db
+from mesadigital.api.main import app
 
 
 def test_health(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
+
+
+def test_healthz_ok(client: TestClient) -> None:
+    r = client.get("/api/healthz")
+    assert r.status_code == 200
+    assert r.json() == {"db": "ok"}
+
+
+def test_healthz_db_down() -> None:
+    def broken_db() -> Generator[MagicMock, None, None]:
+        mock = MagicMock()
+        mock.execute.side_effect = Exception("Connection refused")
+        yield mock
+
+    app.dependency_overrides[get_db] = broken_db
+    try:
+        with TestClient(app, raise_server_exceptions=False) as c:
+            r = c.get("/api/healthz")
+        assert r.status_code == 503
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_register_diner(seeded_client: TestClient) -> None:
