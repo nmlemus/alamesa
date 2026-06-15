@@ -48,8 +48,8 @@ class RestaurantUserUpdate(BaseModel):
 class RestaurantUserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    restaurant_id: int
+    id: str
+    restaurant_id: str
     email: str
     role: RestaurantUserRole
     # hashed_password intentionally absent (structural field-level security)
@@ -73,8 +73,9 @@ class DinerUpdate(BaseModel):
 class DinerRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    email: str
+    id: str
+    restaurant_id: str
+    phone: str
     name: str
 
 
