@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  PNPM_VERSION: "9"
+
+jobs:
+  lint:
+    name: Lint (ruff + mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dev deps
+        run: pip install -e ".[dev]"
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: mypy
+        run: mypy src/
+
+  test-sqlite:
+    name: Test (SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dev deps
+        run: pip install -e ".[dev]"
+
+      - name: pytest
+        run: pytest -q
+
+  test-postgres:
+    name: Test (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mesadigital
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: mesadigital_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgresql+psycopg2://mesadigital:test@localhost:5432/mesadigital_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dev deps
+        run: pip install -e ".[dev]"
+
+      - name: pytest
+        run: pytest -q
+
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter diner-app typecheck
+
+      - name: Build
+        run: pnpm --filter diner-app build
+
+  type-mirror:
+    name: Type mirror check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: check_type_mirror.sh
+        run: bash scripts/check_type_mirror.sh

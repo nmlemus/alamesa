@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from typing import Annotated
 
 from mesadigital.api.db.models import (
-    Base,
     Diner,
     MenuItem,
     Order,

@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from collections.abc import Generator
 from pathlib import Path
 
@@ -27,13 +28,17 @@ def load_seed_module() -> object:
 
 @pytest.fixture()
 def db_engine() -> Generator[Engine, None, None]:
-    # StaticPool shares the same in-memory SQLite connection across all
-    # sessions, so tables created by create_all remain visible to the app.
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    database_url = os.environ.get("DATABASE_URL", "sqlite:///:memory:")
+    if database_url.startswith("sqlite"):
+        # StaticPool shares the same in-memory SQLite connection across all
+        # sessions, so tables created by create_all remain visible to the app.
+        engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+    else:
+        engine = create_engine(database_url)
     Base.metadata.create_all(engine)
     yield engine
     Base.metadata.drop_all(engine)
