@@ -1,16 +1,24 @@
-import enum
+import uuid
 from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from shared.contracts import OrderEventActorType, OrderStatus, RestaurantUserRole
+
+
+def _uuid() -> str:
+    return uuid.uuid4().hex
 
 
 class Base(DeclarativeBase):
@@ -20,43 +28,45 @@ class Base(DeclarativeBase):
 target_metadata = Base.metadata
 
 
-class OrderStatus(str, enum.Enum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    READY = "ready"
-    CLOSED = "closed"
-
-
-class RestaurantUserRole(str, enum.Enum):
-    ADMIN = "admin"
-    STAFF = "staff"
-
-
 class Restaurant(Base):
     __tablename__ = "restaurants"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     slug: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     users: Mapped[list["RestaurantUser"]] = relationship(back_populates="restaurant")
     categories: Mapped[list["Category"]] = relationship(back_populates="restaurant")
     menu_items: Mapped[list["MenuItem"]] = relationship(back_populates="restaurant")
     tables: Mapped[list["RestaurantTable"]] = relationship(back_populates="restaurant")
     orders: Mapped[list["Order"]] = relationship(back_populates="restaurant")
+    diners: Mapped[list["Diner"]] = relationship(back_populates="restaurant")
 
 
 class RestaurantUser(Base):
     __tablename__ = "restaurant_users"
+    __table_args__ = (UniqueConstraint("restaurant_id", "email"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    restaurant_id: Mapped[int] = mapped_column(
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    restaurant_id: Mapped[str] = mapped_column(
         ForeignKey("restaurants.id"), nullable=False
     )
-    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    email: Mapped[str] = mapped_column(String(200), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[RestaurantUserRole] = mapped_column(
-        SAEnum(RestaurantUserRole), nullable=False
+        SAEnum(RestaurantUserRole, native_enum=False), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     restaurant: Mapped["Restaurant"] = relationship(back_populates="users")
@@ -64,24 +74,41 @@ class RestaurantUser(Base):
 
 class Diner(Base):
     __tablename__ = "diners"
+    __table_args__ = (UniqueConstraint("restaurant_id", "phone"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    restaurant_id: Mapped[str] = mapped_column(
+        ForeignKey("restaurants.id"), nullable=False
+    )
+    phone: Mapped[str] = mapped_column(String(30), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
+    restaurant: Mapped["Restaurant"] = relationship(back_populates="diners")
     orders: Mapped[list["Order"]] = relationship(back_populates="diner")
 
 
 class Category(Base):
     __tablename__ = "categories"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    restaurant_id: Mapped[int] = mapped_column(
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    restaurant_id: Mapped[str] = mapped_column(
         ForeignKey("restaurants.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     restaurant: Mapped["Restaurant"] = relationship(back_populates="categories")
     menu_items: Mapped[list["MenuItem"]] = relationship(back_populates="category")
@@ -90,17 +117,23 @@ class Category(Base):
 class MenuItem(Base):
     __tablename__ = "menu_items"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    restaurant_id: Mapped[int] = mapped_column(
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    restaurant_id: Mapped[str] = mapped_column(
         ForeignKey("restaurants.id"), nullable=False
     )
-    category_id: Mapped[int] = mapped_column(
+    category_id: Mapped[str] = mapped_column(
         ForeignKey("categories.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     available: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     restaurant: Mapped["Restaurant"] = relationship(back_populates="menu_items")
     category: Mapped["Category"] = relationship(back_populates="menu_items")
@@ -108,55 +141,99 @@ class MenuItem(Base):
 
 
 class RestaurantTable(Base):
-    __tablename__ = "restaurant_tables"
+    __tablename__ = "tables"
+    __table_args__ = (UniqueConstraint("restaurant_id", "number"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    restaurant_id: Mapped[int] = mapped_column(
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    restaurant_id: Mapped[str] = mapped_column(
         ForeignKey("restaurants.id"), nullable=False
     )
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     label: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     restaurant: Mapped["Restaurant"] = relationship(back_populates="tables")
     orders: Mapped[list["Order"]] = relationship(back_populates="table")
 
 
+_ORDER_STATUS_CHECK = ", ".join(f"'{s.value}'" for s in OrderStatus)
+
+
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({_ORDER_STATUS_CHECK})",
+            name="ck_orders_status",
+        ),
+    )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    restaurant_id: Mapped[int] = mapped_column(
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    restaurant_id: Mapped[str] = mapped_column(
         ForeignKey("restaurants.id"), nullable=False
     )
-    table_id: Mapped[int] = mapped_column(
-        ForeignKey("restaurant_tables.id"), nullable=False
-    )
-    diner_id: Mapped[int | None] = mapped_column(
+    table_id: Mapped[str] = mapped_column(ForeignKey("tables.id"), nullable=False)
+    diner_id: Mapped[str | None] = mapped_column(
         ForeignKey("diners.id"), nullable=True
     )
     status: Mapped[OrderStatus] = mapped_column(
-        SAEnum(OrderStatus), nullable=False, default=OrderStatus.PENDING
+        String(20), nullable=False, default=OrderStatus.PENDING
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     restaurant: Mapped["Restaurant"] = relationship(back_populates="orders")
     table: Mapped["RestaurantTable"] = relationship(back_populates="orders")
     diner: Mapped["Diner | None"] = relationship(back_populates="orders")
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order")
+    events: Mapped[list["OrderEvent"]] = relationship(back_populates="order")
 
 
 class OrderItem(Base):
     __tablename__ = "order_items"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False)
-    menu_item_id: Mapped[int] = mapped_column(
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), nullable=False)
+    menu_item_id: Mapped[str] = mapped_column(
         ForeignKey("menu_items.id"), nullable=False
     )
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     unit_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     order: Mapped["Order"] = relationship(back_populates="items")
     menu_item: Mapped["MenuItem"] = relationship(back_populates="order_items")
+
+
+class OrderEvent(Base):
+    __tablename__ = "order_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), nullable=False)
+    actor_type: Mapped[OrderEventActorType] = mapped_column(
+        SAEnum(OrderEventActorType, native_enum=False, name="ordereventactortype"),
+        nullable=False,
+    )
+    actor_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    from_status: Mapped[OrderStatus] = mapped_column(String(20), nullable=False)
+    to_status: Mapped[OrderStatus] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # No updated_at — append-only event log
+
+    order: Mapped["Order"] = relationship(back_populates="events")

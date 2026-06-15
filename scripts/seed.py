@@ -61,7 +61,7 @@ def seed(session: Session) -> None:
         admin = RestaurantUser(
             restaurant_id=restaurant.id,
             email=admin_email,
-            password_hash=_hash("demo1234"),
+            hashed_password=_hash("demo1234"),
             role=RestaurantUserRole.ADMIN,
         )
         session.add(admin)
