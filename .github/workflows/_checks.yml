@@ -1,0 +1,90 @@
+name: Checks
+
+on:
+  workflow_call:
+
+jobs:
+  lint-type-test:
+    name: Lint · Type-check · Test (SQLite)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Ruff check
+        run: ruff check .
+
+      - name: Mypy
+        run: mypy src/
+
+      - name: Pytest (SQLite)
+        run: pytest -q
+        env:
+          DATABASE_URL: "sqlite:///./dev.db"
+
+      - name: Type mirror check
+        run: bash scripts/check_type_mirror.sh
+
+      - name: Set up pnpm 9
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install
+
+      - name: Frontend typecheck
+        working-directory: frontend
+        run: pnpm typecheck
+
+      - name: Frontend build
+        working-directory: frontend
+        run: pnpm build
+
+  test-postgres:
+    name: Test (PostgreSQL)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mesadigital
+          POSTGRES_PASSWORD: mesadigital
+          POSTGRES_DB: mesadigital_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -e ".[dev]" psycopg2-binary
+
+      - name: Pytest (PostgreSQL)
+        run: pytest -q
+        env:
+          DATABASE_URL: "postgresql://mesadigital:mesadigital@localhost:5432/mesadigital_test"

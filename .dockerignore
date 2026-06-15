@@ -1,0 +1,17 @@
+.git
+.github
+.pytest_cache
+.mypy_cache
+__pycache__
+*.pyc
+*.egg-info
+dist/
+.venv
+venv
+env
+frontend
+tests
+alembic
+scripts
+dev.db
+.env
