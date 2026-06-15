@@ -1,5 +1,5 @@
 """Verify Alembic migration: upgrade head creates all 9 tables + 5 indexes,
-downgrade -1 drops them all, and alembic check detects no drift."""
+downgrade base drops them all, and alembic check detects no drift."""
 import tempfile
 from pathlib import Path
 
@@ -71,7 +71,7 @@ def test_upgrade_creates_all_indexes(sqlite_url: str) -> None:
 def test_downgrade_drops_all_tables(sqlite_url: str) -> None:
     cfg = _make_config(sqlite_url)
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, "base")
     engine = create_engine(sqlite_url)
     try:
         tables = set(inspect(engine).get_table_names()) - {"alembic_version"}

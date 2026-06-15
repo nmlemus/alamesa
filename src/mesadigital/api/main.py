@@ -1,5 +1,6 @@
 import hashlib
 from collections.abc import Generator
+from datetime import timedelta
 from typing import Annotated
 
 import uvicorn
@@ -16,8 +17,10 @@ from mesadigital.api.db.models import (
     OrderItem,
     Restaurant,
     RestaurantTable,
+    RestaurantUser,
 )
 from mesadigital.api.db.session import get_db
+from mesadigital.api.security import create_token, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderStatus
 
@@ -95,6 +98,16 @@ class UpdateStatusRequest(BaseModel):
     status: str
 
 
+class StaffLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class StaffLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 # ── API Router ────────────────────────────────────────────────────────────
 
 api_router = APIRouter()
@@ -107,6 +120,24 @@ def healthz(db: DbDep) -> dict[str, str]:
         return {"db": "ok"}
     except Exception:
         raise HTTPException(status_code=503, detail={"db": "error"})
+
+
+@api_router.post("/auth/login", response_model=StaffLoginResponse)
+def staff_login(body: StaffLoginRequest, db: DbDep) -> StaffLoginResponse:
+    user = db.scalar(select(RestaurantUser).where(RestaurantUser.email == body.email))
+    password_ok = verify_password(body.password, user.hashed_password) if user is not None else False
+    if user is None or not password_ok or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_token(
+        {
+            "sub": user.id,
+            "restaurant_id": user.restaurant_id,
+            "role": str(user.role),
+            "type": "staff",
+        },
+        timedelta(days=7),
+    )
+    return StaffLoginResponse(access_token=token)
 
 
 @api_router.post("/diners/register", response_model=DinerResponse, status_code=201)
