@@ -1,13 +1,11 @@
 import hashlib
-import os
-from collections.abc import Generator
+from typing import Annotated
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from typing import Annotated
 
 from mesadigital.api.db.models import (
     Diner,
@@ -17,18 +15,10 @@ from mesadigital.api.db.models import (
     Restaurant,
     RestaurantTable,
 )
+from mesadigital.api.db.session import get_db
 from shared.contracts import LEGAL_TRANSITIONS, OrderStatus
 
 app = FastAPI(title="Mesa Digital API")
-
-DB_URL = os.environ.get("DATABASE_URL", "sqlite:///dev.db")
-engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
-
-
-def get_db() -> Generator[Session, None, None]:
-    with Session(engine) as session:
-        yield session
-
 
 DbDep = Annotated[Session, Depends(get_db)]
 
