@@ -1,4 +1,3 @@
-import hashlib
 from collections.abc import Generator
 from datetime import timedelta
 from typing import Annotated
@@ -20,7 +19,7 @@ from mesadigital.api.db.models import (
     RestaurantUser,
 )
 from mesadigital.api.db.session import get_db
-from mesadigital.api.security import create_token, verify_password
+from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderStatus
 
@@ -161,7 +160,7 @@ def register_diner(body: DinerRegisterRequest, db: DbDep) -> DinerResponse:
         restaurant_id=restaurant.id,
         phone=body.phone,
         name=body.name,
-        hashed_password=hashlib.sha256(body.password.encode()).hexdigest(),
+        hashed_password=hash_password(body.password),
     )
     db.add(diner)
     db.commit()
@@ -177,6 +176,8 @@ def get_menu(slug: str, db: DbDep) -> MenuResponse:
 
     categories_out: list[CategoryOut] = []
     for cat in sorted(restaurant.categories, key=lambda c: c.display_order):
+        if not cat.is_visible:
+            continue
         items_out = [
             MenuItemOut(
                 id=item.id,
@@ -185,7 +186,7 @@ def get_menu(slug: str, db: DbDep) -> MenuResponse:
                 price_cents=item.price_cents,
                 available=item.is_available,
             )
-            for item in cat.menu_items
+            for item in sorted(cat.menu_items, key=lambda i: i.display_order)
         ]
         categories_out.append(
             CategoryOut(id=cat.id, name=cat.name, items=items_out)

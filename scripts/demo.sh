@@ -40,20 +40,14 @@ echo "Server is up."
 
 say "Step 1 — Register a new diner (customer)"
 echo "POST $BASE_URL/api/diners/register"
+
+# Use a timestamp-based phone so each demo run creates a fresh diner.
+DEMO_PHONE="+34600$(date +%s | tail -c 7)"
 REGISTER_JSON=$(curl -sf -X POST "$BASE_URL/api/diners/register" \
   -H "Content-Type: application/json" \
-  -d '{"email":"ana.garcia@example.com","name":"Ana García","password":"secret123"}' \
-  || true)
-
-# If already registered (409), log in by using a fixed diner_id=1 for the demo.
-if [[ -z "$REGISTER_JSON" ]] || echo "$REGISTER_JSON" | python3 -c \
-    "import sys, json; d=json.load(sys.stdin); sys.exit(0 if 'id' in d else 1)" 2>/dev/null; then
-  DINER_ID=$(echo "$REGISTER_JSON" | json_field "['id']")
-  echo "Registered diner id=$DINER_ID"
-else
-  echo "(diner already exists — continuing with id=1)"
-  DINER_ID=1
-fi
+  -d "{\"restaurant_slug\":\"demo\",\"phone\":\"$DEMO_PHONE\",\"name\":\"Ana García\",\"password\":\"secret123\"}")
+DINER_ID=$(echo "$REGISTER_JSON" | json_field "['id']")
+echo "Registered diner id=$DINER_ID (phone=$DEMO_PHONE)"
 
 # ── Step 2: Browse the menu ───────────────────────────────────────────────────
 
@@ -76,11 +70,11 @@ ORDER_JSON=$(curl -sf -X POST "$BASE_URL/api/orders" \
   -H "Content-Type: application/json" \
   -d "{
     \"restaurant_slug\": \"demo\",
-    \"table_id\": $TABLE_ID,
-    \"diner_id\": $DINER_ID,
+    \"table_id\": \"$TABLE_ID\",
+    \"diner_id\": \"$DINER_ID\",
     \"items\": [
-      {\"menu_item_id\": $ITEM1_ID, \"quantity\": 2},
-      {\"menu_item_id\": $ITEM2_ID, \"quantity\": 1}
+      {\"menu_item_id\": \"$ITEM1_ID\", \"quantity\": 2},
+      {\"menu_item_id\": \"$ITEM2_ID\", \"quantity\": 1}
     ]
   }")
 echo "$ORDER_JSON" | python3 -m json.tool
@@ -96,17 +90,25 @@ curl -sf -X PATCH "$BASE_URL/api/orders/$ORDER_ID/status" \
   -H "Content-Type: application/json" \
   -d '{"status":"confirmed"}' | python3 -m json.tool
 
-# ── Step 5: Kitchen marks order ready ────────────────────────────────────────
+# ── Step 5: Kitchen starts preparing ─────────────────────────────────────────
 
-say "Step 5 — Kitchen marks the order ready (confirmed → ready)"
+say "Step 5 — Kitchen starts preparing (confirmed → preparing)"
+echo "PATCH $BASE_URL/api/orders/$ORDER_ID/status"
+curl -sf -X PATCH "$BASE_URL/api/orders/$ORDER_ID/status" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"preparing"}' | python3 -m json.tool
+
+# ── Step 6: Kitchen marks order ready ────────────────────────────────────────
+
+say "Step 6 — Kitchen marks the order ready (preparing → ready)"
 echo "PATCH $BASE_URL/api/orders/$ORDER_ID/status"
 curl -sf -X PATCH "$BASE_URL/api/orders/$ORDER_ID/status" \
   -H "Content-Type: application/json" \
   -d '{"status":"ready"}' | python3 -m json.tool
 
-# ── Step 6: Close the order ───────────────────────────────────────────────────
+# ── Step 7: Close the order ───────────────────────────────────────────────────
 
-say "Step 6 — Close the order after delivery (ready → closed)"
+say "Step 7 — Close the order after delivery (ready → closed)"
 echo "PATCH $BASE_URL/api/orders/$ORDER_ID/status"
 curl -sf -X PATCH "$BASE_URL/api/orders/$ORDER_ID/status" \
   -H "Content-Type: application/json" \
@@ -116,5 +118,5 @@ curl -sf -X PATCH "$BASE_URL/api/orders/$ORDER_ID/status" \
 
 say "Demo complete"
 echo "Full lifecycle for order $ORDER_ID:"
-echo "  pending → confirmed → ready → closed"
+echo "  pending → confirmed → preparing → ready → closed"
 echo ""

@@ -24,7 +24,7 @@ def test_order_create_rejects_status_field() -> None:
     with pytest.raises(ValidationError):
         OrderCreate(
             restaurant_slug="demo",
-            table_id=1,
+            table_id="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
             items=[],
             status="pending",  # type: ignore[call-arg]
         )
@@ -38,7 +38,7 @@ def test_order_update_rejects_status_field() -> None:
 def test_order_create_valid_without_status() -> None:
     obj = OrderCreate(
         restaurant_slug="demo",
-        table_id=1,
+        table_id="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
         items=[OrderItemInput(menu_item_id="42", quantity=2)],
     )
     assert obj.restaurant_slug == "demo"
@@ -60,8 +60,8 @@ def test_restaurant_user_read_has_no_hashed_password() -> None:
 def test_menu_item_create_price_cents_must_be_positive() -> None:
     with pytest.raises(ValidationError):
         MenuItemCreate(
-            restaurant_id=1,
-            category_id=1,
+            restaurant_id="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+            category_id="b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
             name="Tacos",
             price_cents=0,
         )
@@ -70,8 +70,8 @@ def test_menu_item_create_price_cents_must_be_positive() -> None:
 def test_menu_item_create_negative_price_rejected() -> None:
     with pytest.raises(ValidationError):
         MenuItemCreate(
-            restaurant_id=1,
-            category_id=1,
+            restaurant_id="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+            category_id="b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
             name="Tacos",
             price_cents=-100,
         )
@@ -79,7 +79,10 @@ def test_menu_item_create_negative_price_rejected() -> None:
 
 def test_menu_item_create_valid_price() -> None:
     obj = MenuItemCreate(
-        restaurant_id=1, category_id=1, name="Tacos", price_cents=1200
+        restaurant_id="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+        category_id="b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
+        name="Tacos",
+        price_cents=1200,
     )
     assert obj.price_cents == 1200
 
@@ -131,8 +134,8 @@ def test_table_read_qr_url_from_orm_object() -> None:
         slug = "mi-restaurante"
 
     class FakeTable:
-        id = 7
-        restaurant_id = 3
+        id = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+        restaurant_id = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5"
         number = 5
         label = "Terraza"
         restaurant = FakeRestaurant()
@@ -145,8 +148,8 @@ def test_table_read_qr_url_from_orm_object() -> None:
 def test_table_read_qr_url_from_dict() -> None:
     obj = TableRead.model_validate(
         {
-            "id": 1,
-            "restaurant_id": 2,
+            "id": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+            "restaurant_id": "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
             "number": 3,
             "label": None,
             "qr_url": "/qr/slug/3",

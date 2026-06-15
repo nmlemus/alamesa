@@ -1,0 +1,1 @@
+pip install -e ".[dev]" -q && python -m pytest -q && pnpm install --frozen-lockfile && pnpm -r build && pnpm -r test

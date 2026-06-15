@@ -11,7 +11,6 @@ Creates:
 
 Safe to run multiple times (idempotent via existence checks).
 """
-import hashlib
 import os
 import sys
 from pathlib import Path
@@ -19,6 +18,7 @@ from pathlib import Path
 # Allow running as `python scripts/seed.py` without installing the package.
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT / "src"))
+sys.path.insert(0, str(_ROOT))  # needed for shared.contracts
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -32,12 +32,9 @@ from mesadigital.api.db.models import (
     RestaurantUser,
     RestaurantUserRole,
 )
+from mesadigital.api.security import hash_password
 
 DB_URL = os.environ.get("DATABASE_URL", "sqlite:///dev.db")
-
-
-def _hash(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
 
 
 def seed(session: Session) -> None:
@@ -61,7 +58,7 @@ def seed(session: Session) -> None:
         admin = RestaurantUser(
             restaurant_id=restaurant.id,
             email=admin_email,
-            hashed_password=_hash("demo1234"),
+            hashed_password=hash_password("demo1234"),
             role=RestaurantUserRole.ADMIN,
         )
         session.add(admin)
