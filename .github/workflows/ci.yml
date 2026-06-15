@@ -96,10 +96,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm --filter diner-app typecheck
+        run: pnpm --filter diner-app typecheck && pnpm --filter ops-dashboard typecheck
 
       - name: Build
-        run: pnpm --filter diner-app build
+        run: pnpm --filter diner-app build && pnpm --filter ops-dashboard build
 
   type-mirror:
     name: Type mirror check
