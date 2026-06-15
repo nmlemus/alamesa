@@ -1,11 +1,12 @@
 from collections.abc import Generator
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -107,6 +108,16 @@ class StaffLoginResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class DinerPublicRegisterRequest(BaseModel):
+    name: str = Field(min_length=2)
+    phone: str = Field(min_length=1)
+
+
+class DinerTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 # ── API Router ────────────────────────────────────────────────────────────
 
 api_router = APIRouter()
@@ -137,6 +148,62 @@ def staff_login(body: StaffLoginRequest, db: DbDep) -> StaffLoginResponse:
         timedelta(days=7),
     )
     return StaffLoginResponse(access_token=token)
+
+
+@api_router.post("/public/restaurants/{restaurant_id}/diners/register")
+def public_register_diner(
+    restaurant_id: str, body: DinerPublicRegisterRequest, db: DbDep
+) -> JSONResponse:
+    restaurant = db.scalar(
+        select(Restaurant).where(
+            Restaurant.id == restaurant_id,
+            Restaurant.is_active == True,  # noqa: E712
+        )
+    )
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    existing = db.scalar(
+        select(Diner).where(
+            Diner.restaurant_id == restaurant_id,
+            Diner.phone == body.phone,
+        )
+    )
+
+    now = datetime.now(timezone.utc)
+
+    if existing is None:
+        diner = Diner(
+            restaurant_id=restaurant_id,
+            phone=body.phone,
+            name=body.name,
+            hashed_password="",
+            last_seen_at=now,
+        )
+        db.add(diner)
+        db.commit()
+        db.refresh(diner)
+        http_status = 201
+    else:
+        existing.name = body.name
+        existing.last_seen_at = now
+        db.commit()
+        db.refresh(existing)
+        diner = existing
+        http_status = 200
+
+    token = create_token(
+        {
+            "sub": diner.id,
+            "restaurant_id": diner.restaurant_id,
+            "type": "diner",
+        },
+        timedelta(hours=24),
+    )
+    return JSONResponse(
+        content={"access_token": token, "token_type": "bearer"},
+        status_code=http_status,
+    )
 
 
 @api_router.post("/diners/register", response_model=DinerResponse, status_code=201)
