@@ -75,3 +75,15 @@ export interface OrderRead {
 export interface OrderReadWithItems extends OrderRead {
   items: OrderItemRead[];
 }
+
+export interface CartItem {
+  menu_item: MenuItemRead;
+  quantity: number;
+  subtotal_cents: number;
+}
+
+export interface CartState {
+  items: CartItem[];
+  total_cents: number;
+  item_count: number;
+}
