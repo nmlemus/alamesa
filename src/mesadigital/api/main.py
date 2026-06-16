@@ -22,8 +22,9 @@ from mesadigital.api.db.models import (
     RestaurantUser,
 )
 from mesadigital.api.db.session import get_db
-from mesadigital.api.dependencies import require_diner_auth
-from mesadigital.api.schemas import CategoryRead, DinerRead, MenuItemRead, RestaurantRead
+from mesadigital.api.db.store import validate_transition
+from mesadigital.api.dependencies import require_auth, require_diner_auth
+from mesadigital.api.schemas import CategoryRead, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderEventActorType, OrderStatus
@@ -502,6 +503,44 @@ def update_order_status(
         table_id=order.table_id,
         restaurant_id=order.restaurant_id,
     )
+
+
+@api_router.post("/orders/{order_id}/confirm", response_model=OrderRead)
+def confirm_order(
+    order_id: str,
+    db: DbDep,
+    user: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> OrderRead:
+    order = db.scalar(
+        select(Order).where(Order.id == order_id).with_for_update()
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.restaurant_id != user.restaurant_id:
+        raise HTTPException(status_code=403, detail="Restaurant scope mismatch")
+
+    validate_transition(order, OrderStatus.CONFIRMED, OrderEventActorType.STAFF)
+
+    from_status = OrderStatus(order.status)
+    now = datetime.now(timezone.utc)
+    order.status = OrderStatus.CONFIRMED
+    order.confirmed_at = now
+    order.updated_at = now
+
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            actor_type=OrderEventActorType.STAFF,
+            actor_id=user.id,
+            from_status=from_status,
+            to_status=OrderStatus.CONFIRMED,
+        )
+    )
+
+    db.commit()
+    db.refresh(order)
+    return OrderRead.model_validate(order)
 
 
 # ── App factory ────────────────────────────────────────────────────────────

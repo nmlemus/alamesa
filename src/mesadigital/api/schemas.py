@@ -213,7 +213,9 @@ class OrderRead(BaseModel):
     table_id: str
     diner_id: str | None
     status: OrderStatus
+    confirmed_at: datetime | None
     created_at: datetime
+    updated_at: datetime
 
 
 # ── OrderItem ─────────────────────────────────────────────────────────────────
