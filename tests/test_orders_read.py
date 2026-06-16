@@ -140,13 +140,13 @@ def test_get_order_not_found_returns_404(seeded_client: TestClient) -> None:
     assert r.status_code == 404
 
 
-def test_get_order_no_auth_returns_401(seeded_client: TestClient) -> None:
+def test_get_order_no_auth_returns_403(seeded_client: TestClient) -> None:
     diner_token = _get_diner_token(seeded_client)
     order_id = _create_order(seeded_client, diner_token)
 
     r = seeded_client.get(f"/api/orders/{order_id}")
 
-    assert r.status_code == 401
+    assert r.status_code == 403
 
 
 # ── GET /api/restaurants/{rid}/orders ─────────────────────────────────────────
@@ -299,12 +299,12 @@ def test_list_orders_invalid_cursor_returns_422(seeded_client: TestClient) -> No
     assert r.status_code == 422
 
 
-def test_list_orders_no_auth_returns_401(seeded_client: TestClient) -> None:
+def test_list_orders_no_auth_returns_403(seeded_client: TestClient) -> None:
     rid = _get_restaurant_id(seeded_client)
 
     r = seeded_client.get(f"/api/restaurants/{rid}/orders")
 
-    assert r.status_code == 401
+    assert r.status_code == 403
 
 
 def test_list_orders_diner_token_returns_401(seeded_client: TestClient) -> None:

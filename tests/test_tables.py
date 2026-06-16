@@ -90,12 +90,12 @@ def test_list_tables_ordered_by_number(seeded_client: TestClient) -> None:
     assert numbers == sorted(numbers)
 
 
-def test_list_tables_no_auth_returns_401(seeded_client: TestClient) -> None:
+def test_list_tables_no_auth_returns_403(seeded_client: TestClient) -> None:
     rid = _get_restaurant_id(seeded_client)
 
     r = seeded_client.get(f"/api/restaurants/{rid}/tables")
 
-    assert r.status_code == 401
+    assert r.status_code == 403
 
 
 def test_list_tables_wrong_restaurant_returns_403(
@@ -204,7 +204,7 @@ def test_create_table_wrong_restaurant_returns_403(
     assert r.status_code == 403
 
 
-def test_create_table_no_auth_returns_401(seeded_client: TestClient) -> None:
+def test_create_table_no_auth_returns_403(seeded_client: TestClient) -> None:
     rid = _get_restaurant_id(seeded_client)
 
     r = seeded_client.post(
@@ -212,7 +212,7 @@ def test_create_table_no_auth_returns_401(seeded_client: TestClient) -> None:
         json={"number": 99},
     )
 
-    assert r.status_code == 401
+    assert r.status_code == 403
 
 
 def test_create_table_sets_first_qr_generated_at(
@@ -360,14 +360,14 @@ def test_patch_table_wrong_restaurant_returns_403(
     assert r.status_code == 403
 
 
-def test_patch_table_no_auth_returns_401(seeded_client: TestClient) -> None:
+def test_patch_table_no_auth_returns_403(seeded_client: TestClient) -> None:
     token = _get_admin_token(seeded_client)
     rid = _get_restaurant_id(seeded_client)
     table_id = _get_first_table_id(seeded_client, token, rid)
 
     r = seeded_client.patch(f"/api/tables/{table_id}", json={"label": "X"})
 
-    assert r.status_code == 401
+    assert r.status_code == 403
 
 
 # ── PATCH /api/restaurants/{rid} ──────────────────────────────────────────────
@@ -463,12 +463,12 @@ def test_patch_restaurant_wrong_restaurant_returns_403(
     assert r.status_code == 403
 
 
-def test_patch_restaurant_no_auth_returns_401(seeded_client: TestClient) -> None:
+def test_patch_restaurant_no_auth_returns_403(seeded_client: TestClient) -> None:
     rid = _get_restaurant_id(seeded_client)
 
     r = seeded_client.patch(f"/api/restaurants/{rid}", json={"name": "X"})
 
-    assert r.status_code == 401
+    assert r.status_code == 403
 
 
 # ── GET /api/tables/{id}/qr ───────────────────────────────────────────────────
@@ -561,11 +561,11 @@ def test_get_table_qr_wrong_restaurant_returns_403(
     assert r.status_code == 403
 
 
-def test_get_table_qr_no_auth_returns_401(seeded_client: TestClient) -> None:
+def test_get_table_qr_no_auth_returns_403(seeded_client: TestClient) -> None:
     token = _get_admin_token(seeded_client)
     rid = _get_restaurant_id(seeded_client)
     table_id = _get_first_table_id(seeded_client, token, rid)
 
     r = seeded_client.get(f"/api/tables/{table_id}/qr")
 
-    assert r.status_code == 401
+    assert r.status_code == 403
