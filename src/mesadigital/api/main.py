@@ -23,7 +23,7 @@ from mesadigital.api.db.models import (
 )
 from mesadigital.api.db.session import get_db
 from mesadigital.api.dependencies import TokenClaims, require_any_auth, require_auth, require_diner_auth, require_role
-from mesadigital.api.schemas import CategoryRead, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead
+from mesadigital.api.schemas import CategoryRead, CategoryUpdate, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderEventActorType, OrderStatus, RestaurantUserRole
@@ -604,6 +604,95 @@ def list_restaurant_orders(
 
     orders = db.scalars(stmt).all()
     return [OrderRead.model_validate(o) for o in orders]
+
+
+# ── Category CRUD ─────────────────────────────────────────────────────────
+
+
+class CategoryCreateBody(BaseModel):
+    name: str
+    is_visible: bool = True
+    display_order: int = 0
+
+
+@api_router.get("/restaurants/{rid}/categories", response_model=list[CategoryRead])
+def list_categories(
+    rid: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> list[CategoryRead]:
+    if staff.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    categories = db.scalars(
+        select(Category)
+        .where(Category.restaurant_id == rid)
+        .order_by(Category.display_order)
+    ).all()
+    return [CategoryRead.model_validate(cat) for cat in categories]
+
+
+@api_router.post("/restaurants/{rid}/categories", response_model=CategoryRead, status_code=201)
+def create_category(
+    rid: str,
+    body: CategoryCreateBody,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> CategoryRead:
+    if staff.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    category = Category(
+        restaurant_id=rid,
+        name=body.name,
+        is_visible=body.is_visible,
+        display_order=body.display_order,
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return CategoryRead.model_validate(category)
+
+
+@api_router.patch("/categories/{category_id}", response_model=CategoryRead)
+def update_category(
+    category_id: str,
+    body: CategoryUpdate,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> CategoryRead:
+    category = db.scalar(select(Category).where(Category.id == category_id))
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    if category.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if body.name is not None:
+        category.name = body.name
+    if body.is_visible is not None:
+        category.is_visible = body.is_visible
+    if body.display_order is not None:
+        category.display_order = body.display_order
+    db.commit()
+    db.refresh(category)
+    return CategoryRead.model_validate(category)
+
+
+@api_router.delete("/categories/{category_id}", status_code=204)
+def delete_category(
+    category_id: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> None:
+    category = db.scalar(select(Category).where(Category.id == category_id))
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    if category.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if category.menu_items:
+        raise HTTPException(status_code=409, detail="Category has menu items")
+    db.delete(category)
+    db.commit()
+
+
+# ── Restaurant Users CRUD ──────────────────────────────────────────────────
 
 
 @api_router.get("/restaurants/{rid}/users", response_model=list[RestaurantUserRead])
