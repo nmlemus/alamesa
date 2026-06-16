@@ -202,12 +202,12 @@ def test_mark_ready_cross_restaurant_returns_403(
     assert r.status_code == 403
 
 
-def test_mark_ready_no_auth_returns_401(seeded_client: TestClient) -> None:
+def test_mark_ready_no_auth_returns_403(seeded_client: TestClient) -> None:
     diner_token = _get_diner_token(seeded_client)
     order_id = _create_order(seeded_client, diner_token)
 
     r = seeded_client.post(f"/api/orders/{order_id}/mark-ready")
-    assert r.status_code == 401
+    assert r.status_code == 403
 
 
 def test_mark_ready_diner_token_returns_401(seeded_client: TestClient) -> None:
