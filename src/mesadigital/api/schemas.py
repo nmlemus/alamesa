@@ -219,6 +219,9 @@ class OrderRead(BaseModel):
     status: OrderStatus
     confirmed_at: datetime | None = None
     cancelled_at: datetime | None = None
+    preparing_at: datetime | None = None
+    ready_at: datetime | None = None
+    closed_at: datetime | None = None
     created_at: datetime
 
 
