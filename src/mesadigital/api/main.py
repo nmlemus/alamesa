@@ -580,6 +580,123 @@ def confirm_order(
     return OrderRead.model_validate(order)
 
 
+@api_router.post("/orders/{order_id}/start-preparing", response_model=OrderRead)
+def start_preparing_order(
+    order_id: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> OrderRead:
+    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    validate_transition(order, OrderStatus.PREPARING, OrderEventActorType.STAFF)
+
+    now = datetime.now(timezone.utc)
+    order.status = OrderStatus.PREPARING
+    order.preparing_at = now
+    order.updated_at = now
+
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            actor_type=OrderEventActorType.STAFF,
+            actor_id=staff.id,
+            from_status=OrderStatus.CONFIRMED,
+            to_status=OrderStatus.PREPARING,
+        )
+    )
+
+    try:
+        db.commit()
+    except StaleDataError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Order was modified concurrently")
+    db.refresh(order)
+    return OrderRead.model_validate(order)
+
+
+@api_router.post("/orders/{order_id}/mark-ready", response_model=OrderRead)
+def mark_ready_order(
+    order_id: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> OrderRead:
+    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    validate_transition(order, OrderStatus.READY, OrderEventActorType.STAFF)
+
+    now = datetime.now(timezone.utc)
+    order.status = OrderStatus.READY
+    order.ready_at = now
+    order.updated_at = now
+
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            actor_type=OrderEventActorType.STAFF,
+            actor_id=staff.id,
+            from_status=OrderStatus.PREPARING,
+            to_status=OrderStatus.READY,
+        )
+    )
+
+    try:
+        db.commit()
+    except StaleDataError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Order was modified concurrently")
+    db.refresh(order)
+    return OrderRead.model_validate(order)
+
+
+@api_router.post("/orders/{order_id}/close", response_model=OrderRead)
+def close_order(
+    order_id: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> OrderRead:
+    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    validate_transition(order, OrderStatus.CLOSED, OrderEventActorType.STAFF)
+
+    now = datetime.now(timezone.utc)
+    order.status = OrderStatus.CLOSED
+    order.closed_at = now
+    order.updated_at = now
+
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            actor_type=OrderEventActorType.STAFF,
+            actor_id=staff.id,
+            from_status=OrderStatus.READY,
+            to_status=OrderStatus.CLOSED,
+        )
+    )
+
+    try:
+        db.commit()
+    except StaleDataError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Order was modified concurrently")
+    db.refresh(order)
+    return OrderRead.model_validate(order)
+
+
 @api_router.get("/orders/{order_id}", response_model=OrderReadWithItems)
 def get_order(
     order_id: str,
