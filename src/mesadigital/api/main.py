@@ -15,16 +15,18 @@ from mesadigital.api.db.models import (
     Diner,
     MenuItem,
     Order,
+    OrderEvent,
     OrderItem,
     Restaurant,
     RestaurantTable,
     RestaurantUser,
 )
 from mesadigital.api.db.session import get_db
-from mesadigital.api.schemas import CategoryRead, MenuItemRead, RestaurantRead
+from mesadigital.api.dependencies import require_diner_auth
+from mesadigital.api.schemas import CategoryRead, DinerRead, MenuItemRead, RestaurantRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
-from shared.contracts import LEGAL_TRANSITIONS, OrderStatus
+from shared.contracts import LEGAL_TRANSITIONS, OrderEventActorType, OrderStatus
 
 DbDep = Annotated[Session, Depends(get_db)]
 
@@ -85,8 +87,27 @@ class OrderItemRequest(BaseModel):
 class CreateOrderRequest(BaseModel):
     restaurant_slug: str
     table_id: str
-    diner_id: str | None = None
     items: list[OrderItemRequest]
+
+
+class OrderItemInResponse(BaseModel):
+    id: str
+    menu_item_id: str
+    quantity: int
+    unit_price_cents: int
+    item_snapshot_name: str
+
+
+class OrderReadWithItems(BaseModel):
+    id: str
+    restaurant_id: str
+    table_id: str
+    diner_id: str | None
+    status: str
+    created_at: datetime
+    items: list[OrderItemInResponse]
+    total_cents: int
+    item_count: int
 
 
 class OrderResponse(BaseModel):
@@ -339,60 +360,113 @@ def get_menu(slug: str, db: DbDep) -> MenuResponse:
     )
 
 
-@api_router.post("/orders", response_model=OrderResponse, status_code=201)
-def create_order(body: CreateOrderRequest, db: DbDep) -> OrderResponse:
+@api_router.post("/orders", response_model=OrderReadWithItems, status_code=201)
+def create_order(
+    body: CreateOrderRequest,
+    db: DbDep,
+    diner: Annotated[DinerRead, Depends(require_diner_auth)],
+) -> OrderReadWithItems:
     restaurant = db.scalar(
-        select(Restaurant).where(Restaurant.slug == body.restaurant_slug)
+        select(Restaurant).where(
+            Restaurant.slug == body.restaurant_slug,
+            Restaurant.is_active == True,  # noqa: E712
+        )
     )
     if restaurant is None:
         raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    if diner.restaurant_id != restaurant.id:
+        raise HTTPException(status_code=403, detail="Diner does not belong to this restaurant")
 
     table = db.scalar(
         select(RestaurantTable).where(
             RestaurantTable.id == body.table_id,
             RestaurantTable.restaurant_id == restaurant.id,
+            RestaurantTable.is_active == True,  # noqa: E712
         )
     )
     if table is None:
-        raise HTTPException(status_code=404, detail="Table not found")
+        raise HTTPException(status_code=422, detail="Table not found or inactive")
 
+    # Validate all items upfront; collect failing IDs
+    failing_item_ids: list[str] = []
+    resolved_items: dict[str, MenuItem] = {}
+    for req in body.items:
+        item = db.scalar(
+            select(MenuItem).where(
+                MenuItem.id == req.menu_item_id,
+                MenuItem.restaurant_id == restaurant.id,
+            )
+        )
+        if item is None or not item.is_available:
+            failing_item_ids.append(req.menu_item_id)
+        else:
+            resolved_items[req.menu_item_id] = item
+
+    if failing_item_ids:
+        raise HTTPException(
+            status_code=422,
+            detail={"unavailable_item_ids": failing_item_ids},
+        )
+
+    # Single transaction: order + items (with snapshots) + creation event
     order = Order(
         restaurant_id=restaurant.id,
         table_id=table.id,
-        diner_id=body.diner_id,
+        diner_id=diner.id,
         status=OrderStatus.PENDING,
     )
     db.add(order)
     db.flush()
 
     for req in body.items:
-        menu_item = db.scalar(
-            select(MenuItem).where(
-                MenuItem.id == req.menu_item_id,
-                MenuItem.restaurant_id == restaurant.id,
-            )
-        )
-        if menu_item is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Menu item {req.menu_item_id} not found",
-            )
+        mi = resolved_items[req.menu_item_id]
         db.add(
             OrderItem(
                 order_id=order.id,
-                menu_item_id=menu_item.id,
+                menu_item_id=mi.id,
                 quantity=req.quantity,
-                unit_price_cents=menu_item.price_cents,
+                unit_price_cents=mi.price_cents,
+                item_snapshot_name=mi.name,
             )
         )
 
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            actor_type=OrderEventActorType.DINER,
+            actor_id=diner.id,
+            from_status=OrderStatus.PENDING,
+            to_status=OrderStatus.PENDING,
+        )
+    )
+
     db.commit()
     db.refresh(order)
-    return OrderResponse(
+
+    items_out = [
+        OrderItemInResponse(
+            id=oi.id,
+            menu_item_id=oi.menu_item_id,
+            quantity=oi.quantity,
+            unit_price_cents=oi.unit_price_cents,
+            item_snapshot_name=oi.item_snapshot_name,
+        )
+        for oi in order.items
+    ]
+    total_cents = sum(oi.unit_price_cents * oi.quantity for oi in order.items)
+    item_count = sum(oi.quantity for oi in order.items)
+
+    return OrderReadWithItems(
         id=order.id,
-        status=str(order.status),
-        table_id=order.table_id,
         restaurant_id=order.restaurant_id,
+        table_id=order.table_id,
+        diner_id=order.diner_id,
+        status=str(order.status),
+        created_at=order.created_at,
+        items=items_out,
+        total_cents=total_cents,
+        item_count=item_count,
     )
 
 
