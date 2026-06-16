@@ -24,17 +24,17 @@ export const OrderEventActorType = {
 
 export type OrderEventActorType = "diner" | "staff" | "system";
 
-export interface DinerRead {
+export interface RestaurantRead {
   id: string;
-  phone: string;
+  slug: string;
   name: string;
 }
 
-export interface CategoryRead {
+export interface DinerRead {
   id: string;
   restaurant_id: string;
+  phone: string;
   name: string;
-  display_order: number;
 }
 
 export interface MenuItemRead {
@@ -44,7 +44,17 @@ export interface MenuItemRead {
   name: string;
   description: string | null;
   price_cents: number;
-  available: boolean;
+  is_available: boolean;
+  display_order: number;
+}
+
+export interface CategoryRead {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  is_visible: boolean;
+  display_order: number;
+  items: MenuItemRead[];
 }
 
 export interface TableRead {
@@ -74,4 +84,16 @@ export interface OrderRead {
 
 export interface OrderReadWithItems extends OrderRead {
   items: OrderItemRead[];
+}
+
+export interface CartItem {
+  menu_item: MenuItemRead;
+  quantity: number;
+  subtotal_cents: number;
+}
+
+export interface CartState {
+  items: CartItem[];
+  total_cents: number;
+  item_count: number;
 }
