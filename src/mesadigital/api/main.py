@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.orm import Session, contains_eager
 
 from mesadigital.api.db.models import (
@@ -22,8 +22,8 @@ from mesadigital.api.db.models import (
     RestaurantUser,
 )
 from mesadigital.api.db.session import get_db
-from mesadigital.api.dependencies import require_diner_auth
-from mesadigital.api.schemas import CategoryRead, DinerRead, MenuItemRead, RestaurantRead
+from mesadigital.api.dependencies import TokenClaims, require_any_auth, require_auth, require_diner_auth
+from mesadigital.api.schemas import CategoryRead, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderEventActorType, OrderStatus
@@ -502,6 +502,97 @@ def update_order_status(
         table_id=order.table_id,
         restaurant_id=order.restaurant_id,
     )
+
+
+@api_router.get("/orders/{order_id}", response_model=OrderReadWithItems)
+def get_order(
+    order_id: str,
+    db: DbDep,
+    auth: Annotated[TokenClaims, Depends(require_any_auth)],
+) -> OrderReadWithItems:
+    order = db.scalar(select(Order).where(Order.id == order_id))
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if auth.token_type == "diner":
+        if order.diner_id != auth.sub or order.restaurant_id != auth.restaurant_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        if order.restaurant_id != auth.restaurant_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+    items_out = [
+        OrderItemInResponse(
+            id=oi.id,
+            menu_item_id=oi.menu_item_id,
+            quantity=oi.quantity,
+            unit_price_cents=oi.unit_price_cents,
+            item_snapshot_name=oi.item_snapshot_name,
+        )
+        for oi in order.items
+    ]
+    total_cents = sum(oi.unit_price_cents * oi.quantity for oi in order.items)
+    item_count = sum(oi.quantity for oi in order.items)
+
+    return OrderReadWithItems(
+        id=order.id,
+        restaurant_id=order.restaurant_id,
+        table_id=order.table_id,
+        diner_id=order.diner_id,
+        status=str(order.status),
+        created_at=order.created_at,
+        items=items_out,
+        total_cents=total_cents,
+        item_count=item_count,
+    )
+
+
+@api_router.get("/restaurants/{rid}/orders", response_model=list[OrderRead])
+def list_restaurant_orders(
+    rid: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+    status: str | None = None,
+    before: str | None = None,
+    limit: int = 100,
+) -> list[OrderRead]:
+    if staff.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    stmt = (
+        select(Order)
+        .where(Order.restaurant_id == rid)
+        .order_by(Order.created_at.desc(), Order.id.desc())
+        .limit(limit)
+    )
+
+    if status is not None:
+        raw_statuses = [s.strip() for s in status.split(",") if s.strip()]
+        try:
+            statuses = [OrderStatus(s) for s in raw_statuses]
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid status value: {exc}")
+        if statuses:
+            stmt = stmt.where(Order.status.in_(statuses))
+
+    if before is not None:
+        pivot_exists = db.scalar(
+            select(func.count()).where(Order.id == before, Order.restaurant_id == rid)
+        )
+        if not pivot_exists:
+            raise HTTPException(status_code=422, detail="Invalid cursor: order not found")
+        # Use a scalar subquery so both sides of the comparison use the same
+        # SQLite string format, avoiding Python datetime serialisation mismatches.
+        pivot_ca = select(Order.created_at).where(Order.id == before).scalar_subquery()
+        stmt = stmt.where(
+            or_(
+                Order.created_at < pivot_ca,
+                and_(Order.created_at == pivot_ca, Order.id < before),
+            )
+        )
+
+    orders = db.scalars(stmt).all()
+    return [OrderRead.model_validate(o) for o in orders]
 
 
 # ── App factory ────────────────────────────────────────────────────────────
