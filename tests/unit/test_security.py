@@ -16,7 +16,6 @@ from mesadigital.api.security import (
     hash_password,
     verify_password,
 )
-from mesadigital.api.settings import settings
 from shared.contracts import RestaurantUserRole
 
 

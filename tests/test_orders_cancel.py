@@ -1,16 +1,14 @@
 """Integration tests for POST /api/orders/{id}/cancel (ticket S3-05)."""
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session as SASession
 
-from mesadigital.api.db.models import Order, OrderEvent, Restaurant, RestaurantUser, RestaurantUserRole
+from mesadigital.api.db.models import OrderEvent, Restaurant, RestaurantUser, RestaurantUserRole
 from mesadigital.api.security import hash_password
 from shared.contracts import OrderStatus
 
-from datetime import timedelta
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -216,12 +214,12 @@ def test_cancel_order_not_found_returns_404(seeded_client: TestClient) -> None:
     assert r.status_code == 404
 
 
-def test_cancel_order_no_auth_returns_403(seeded_client: TestClient) -> None:
+def test_cancel_order_no_auth_returns_401(seeded_client: TestClient) -> None:
     diner_token = _get_diner_token(seeded_client)
     order_id = _create_order(seeded_client, diner_token)
 
     r = seeded_client.post(f"/api/orders/{order_id}/cancel")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 def test_cancel_order_cross_restaurant_returns_403(

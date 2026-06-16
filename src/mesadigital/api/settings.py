@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     def parse_cors_origins(cls, v: object) -> list[str]:
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
-        return list(v)  # type: ignore[arg-type]
+        if isinstance(v, (list, tuple, set)):
+            return [str(o) for o in v]
+        return []
 
 
 settings = Settings()

@@ -1,5 +1,4 @@
 """Integration tests for restaurant user management (ticket S4-04)."""
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session as SASession
@@ -75,10 +74,10 @@ def test_list_users_staff_role_returns_403(seeded_client: TestClient, db_engine:
     assert r.status_code == 403
 
 
-def test_list_users_no_auth_returns_403(seeded_client: TestClient) -> None:
+def test_list_users_no_auth_returns_401(seeded_client: TestClient) -> None:
     rid = _get_restaurant_id(seeded_client)
     r = seeded_client.get(f"/api/restaurants/{rid}/users")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 def test_list_users_cross_restaurant_admin_returns_403(

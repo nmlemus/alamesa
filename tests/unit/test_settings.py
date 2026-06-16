@@ -1,4 +1,3 @@
-import pytest
 
 from mesadigital.api.settings import Settings
 

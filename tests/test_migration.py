@@ -1,6 +1,5 @@
 """Verify Alembic migration: upgrade head creates all 9 tables + 5 indexes,
 downgrade base drops them all, and alembic check detects no drift."""
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -8,7 +7,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect
 
 _PROJECT_ROOT = Path(__file__).parent.parent
 

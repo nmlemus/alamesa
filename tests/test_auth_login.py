@@ -1,4 +1,3 @@
-from collections.abc import Generator
 
 import jwt
 import pytest
