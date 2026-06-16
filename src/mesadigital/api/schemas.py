@@ -214,6 +214,7 @@ class OrderRead(BaseModel):
     table_id: str
     diner_id: str | None
     status: OrderStatus
+    confirmed_at: datetime | None = None
     created_at: datetime
 
 

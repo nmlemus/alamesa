@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.orm import Session, contains_eager
+from sqlalchemy.orm.exc import StaleDataError
 
 from mesadigital.api.db.models import (
     Category,
@@ -24,6 +25,7 @@ from mesadigital.api.db.models import (
     RestaurantUser,
 )
 from mesadigital.api.db.session import get_db
+from mesadigital.api.db.store import validate_transition
 from mesadigital.api.dependencies import TokenClaims, require_any_auth, require_auth, require_diner_auth, require_role
 from mesadigital.api.middleware import RequestLoggingMiddleware
 from mesadigital.api.schemas import CategoryRead, CategoryUpdate, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead
@@ -516,6 +518,45 @@ def update_order_status(
         table_id=order.table_id,
         restaurant_id=order.restaurant_id,
     )
+
+
+@api_router.post("/orders/{order_id}/confirm", response_model=OrderRead)
+def confirm_order(
+    order_id: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> OrderRead:
+    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    validate_transition(order, OrderStatus.CONFIRMED, OrderEventActorType.STAFF)
+
+    now = datetime.now(timezone.utc)
+    order.status = OrderStatus.CONFIRMED
+    order.confirmed_at = now
+    order.updated_at = now
+
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            actor_type=OrderEventActorType.STAFF,
+            actor_id=staff.id,
+            from_status=OrderStatus.PENDING,
+            to_status=OrderStatus.CONFIRMED,
+        )
+    )
+
+    try:
+        db.commit()
+    except StaleDataError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Order was modified concurrently")
+    db.refresh(order)
+    return OrderRead.model_validate(order)
 
 
 @api_router.get("/orders/{order_id}", response_model=OrderReadWithItems)
