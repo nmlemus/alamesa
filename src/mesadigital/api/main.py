@@ -21,7 +21,8 @@ from mesadigital.api.db.models import (
     RestaurantUser,
 )
 from mesadigital.api.db.session import get_db
-from mesadigital.api.schemas import CategoryRead, MenuItemRead, RestaurantRead
+from mesadigital.api.dependencies import require_auth, require_restaurant_scope
+from mesadigital.api.schemas import CategoryRead, CategoryUpdate, MenuItemRead, RestaurantRead, RestaurantUserRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderStatus
@@ -118,6 +119,12 @@ class DinerPublicRegisterRequest(BaseModel):
 class DinerTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class CategoryCreateBody(BaseModel):
+    name: str
+    is_visible: bool = True
+    display_order: int = 0
 
 
 # ── API Router ────────────────────────────────────────────────────────────
@@ -428,6 +435,97 @@ def update_order_status(
         table_id=order.table_id,
         restaurant_id=order.restaurant_id,
     )
+
+
+# ── Category CRUD ─────────────────────────────────────────────────────────
+
+_AdminScopeDep = Annotated[RestaurantUserRead, Depends(require_restaurant_scope)]
+_AuthDep = Annotated[RestaurantUserRead, Depends(require_auth)]
+
+
+@api_router.get("/restaurants/{restaurant_id}/categories", response_model=list[CategoryRead])
+def list_categories(
+    restaurant_id: str,
+    db: DbDep,
+    user: _AdminScopeDep,
+) -> list[CategoryRead]:
+    if str(user.role) != "admin":
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    categories = db.scalars(
+        select(Category)
+        .where(Category.restaurant_id == restaurant_id)
+        .order_by(Category.display_order)
+    ).all()
+    return [CategoryRead.model_validate(cat) for cat in categories]
+
+
+@api_router.post(
+    "/restaurants/{restaurant_id}/categories",
+    response_model=CategoryRead,
+    status_code=201,
+)
+def create_category(
+    restaurant_id: str,
+    body: CategoryCreateBody,
+    db: DbDep,
+    user: _AdminScopeDep,
+) -> CategoryRead:
+    if str(user.role) != "admin":
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    cat = Category(
+        restaurant_id=restaurant_id,
+        name=body.name,
+        is_visible=body.is_visible,
+        display_order=body.display_order,
+    )
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return CategoryRead.model_validate(cat)
+
+
+@api_router.patch("/categories/{category_id}", response_model=CategoryRead)
+def update_category(
+    category_id: str,
+    body: CategoryUpdate,
+    db: DbDep,
+    user: _AuthDep,
+) -> CategoryRead:
+    if str(user.role) != "admin":
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    cat = db.scalar(select(Category).where(Category.id == category_id))
+    if cat is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    if cat.restaurant_id != user.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if body.name is not None:
+        cat.name = body.name
+    if body.display_order is not None:
+        cat.display_order = body.display_order
+    if body.is_visible is not None:
+        cat.is_visible = body.is_visible
+    db.commit()
+    db.refresh(cat)
+    return CategoryRead.model_validate(cat)
+
+
+@api_router.delete("/categories/{category_id}", status_code=204)
+def delete_category(
+    category_id: str,
+    db: DbDep,
+    user: _AuthDep,
+) -> None:
+    if str(user.role) != "admin":
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    cat = db.scalar(select(Category).where(Category.id == category_id))
+    if cat is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    if cat.restaurant_id != user.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if cat.menu_items:
+        raise HTTPException(status_code=409, detail="Category has menu items")
+    db.delete(cat)
+    db.commit()
 
 
 # ── App factory ────────────────────────────────────────────────────────────
