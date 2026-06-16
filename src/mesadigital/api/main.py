@@ -26,7 +26,7 @@ from mesadigital.api.dependencies import TokenClaims, require_any_auth, require_
 from mesadigital.api.schemas import CategoryRead, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead, TableRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
-from shared.contracts import LEGAL_TRANSITIONS, OrderEventActorType, OrderStatus
+from shared.contracts import LEGAL_TRANSITIONS, OrderEventActorType, OrderStatus, RestaurantUserRole
 
 DbDep = Annotated[Session, Depends(get_db)]
 
@@ -159,6 +159,18 @@ class RestaurantPatchBody(BaseModel):
 class TableQRResponse(BaseModel):
     table_id: str
     qr_url: str
+
+
+class CreateRestaurantUserRequest(BaseModel):
+    email: str
+    password: str
+    role: RestaurantUserRole
+
+
+class PatchRestaurantUserRequest(BaseModel):
+    role: RestaurantUserRole | None = None
+    is_active: bool | None = None
+
 
 
 # ── API Router ────────────────────────────────────────────────────────────
@@ -721,6 +733,72 @@ def get_table_qr(
         restaurant.first_qr_generated_at = datetime.now(timezone.utc)
         db.commit()
     return TableQRResponse(table_id=table_id, qr_url=f"/qr/{restaurant.slug}/{table.number}")
+
+
+@api_router.get("/restaurants/{rid}/users", response_model=list[RestaurantUserRead])
+def list_restaurant_users(
+    rid: str,
+    db: DbDep,
+    admin: Annotated[RestaurantUserRead, Depends(require_role(["admin"]))],
+) -> list[RestaurantUserRead]:
+    if admin.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    users = db.scalars(
+        select(RestaurantUser).where(RestaurantUser.restaurant_id == rid)
+    ).all()
+    return [RestaurantUserRead.model_validate(u) for u in users]
+
+
+@api_router.post("/restaurants/{rid}/users", response_model=RestaurantUserRead, status_code=201)
+def create_restaurant_user(
+    rid: str,
+    body: CreateRestaurantUserRequest,
+    db: DbDep,
+    admin: Annotated[RestaurantUserRead, Depends(require_role(["admin"]))],
+) -> RestaurantUserRead:
+    if admin.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    existing = db.scalar(
+        select(RestaurantUser).where(
+            RestaurantUser.restaurant_id == rid,
+            RestaurantUser.email == body.email,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    user = RestaurantUser(
+        restaurant_id=rid,
+        email=body.email,
+        hashed_password=hash_password(body.password),
+        role=body.role,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return RestaurantUserRead.model_validate(user)
+
+
+@api_router.patch("/users/{user_id}", response_model=RestaurantUserRead)
+def patch_restaurant_user(
+    user_id: str,
+    body: PatchRestaurantUserRequest,
+    db: DbDep,
+    admin: Annotated[RestaurantUserRead, Depends(require_role(["admin"]))],
+) -> RestaurantUserRead:
+    user = db.scalar(select(RestaurantUser).where(RestaurantUser.id == user_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.restaurant_id != admin.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if body.is_active is False and user_id == admin.id:
+        raise HTTPException(status_code=403, detail="Cannot deactivate your own account")
+    if body.role is not None:
+        user.role = body.role
+    if body.is_active is not None:
+        user.is_active = body.is_active
+    db.commit()
+    db.refresh(user)
+    return RestaurantUserRead.model_validate(user)
 
 
 # ── App factory ────────────────────────────────────────────────────────────
