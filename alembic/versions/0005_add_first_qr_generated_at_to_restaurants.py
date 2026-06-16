@@ -1,4 +1,4 @@
-"""add confirmed_at to orders
+"""add first_qr_generated_at to restaurants
 
 Revision ID: 0005
 Revises: 0004
@@ -15,10 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("orders") as batch_op:
+    with op.batch_alter_table("restaurants") as batch_op:
         batch_op.add_column(
             sa.Column(
-                "confirmed_at",
+                "first_qr_generated_at",
                 sa.DateTime(timezone=True),
                 nullable=True,
             )
@@ -26,5 +26,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("orders") as batch_op:
-        batch_op.drop_column("confirmed_at")
+    with op.batch_alter_table("restaurants") as batch_op:
+        batch_op.drop_column("first_qr_generated_at")

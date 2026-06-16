@@ -28,7 +28,7 @@ from mesadigital.api.db.session import get_db
 from mesadigital.api.db.store import validate_transition
 from mesadigital.api.dependencies import TokenClaims, require_any_auth, require_auth, require_diner_auth, require_role
 from mesadigital.api.middleware import RequestLoggingMiddleware
-from mesadigital.api.schemas import CategoryRead, CategoryUpdate, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead
+from mesadigital.api.schemas import CategoryRead, CategoryUpdate, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead, TableRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderEventActorType, OrderStatus, RestaurantUserRole
@@ -146,6 +146,26 @@ class DinerTokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class TableCreateBody(BaseModel):
+    number: int
+    label: str | None = None
+
+
+class TableUpdateBody(BaseModel):
+    label: str | None = None
+    is_active: bool | None = None
+
+
+class RestaurantPatchBody(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+
+
+class TableQRResponse(BaseModel):
+    table_id: str
+    qr_url: str
+
+
 class CreateRestaurantUserRequest(BaseModel):
     email: str
     password: str
@@ -155,6 +175,7 @@ class CreateRestaurantUserRequest(BaseModel):
 class PatchRestaurantUserRequest(BaseModel):
     role: RestaurantUserRole | None = None
     is_active: bool | None = None
+
 
 
 # ── API Router ────────────────────────────────────────────────────────────
@@ -648,6 +669,114 @@ def list_restaurant_orders(
 
     orders = db.scalars(stmt).all()
     return [OrderRead.model_validate(o) for o in orders]
+
+
+@api_router.get("/restaurants/{rid}/tables", response_model=list[TableRead])
+def list_tables(
+    rid: str,
+    db: DbDep,
+    admin: Annotated[RestaurantUserRead, Depends(require_role(["admin"]))],
+) -> list[TableRead]:
+    if admin.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    tables = db.scalars(
+        select(RestaurantTable)
+        .where(RestaurantTable.restaurant_id == rid)
+        .order_by(RestaurantTable.number)
+    ).all()
+    return [TableRead.model_validate(t) for t in tables]
+
+
+@api_router.post("/restaurants/{rid}/tables", response_model=TableRead, status_code=201)
+def create_table(
+    rid: str,
+    body: TableCreateBody,
+    db: DbDep,
+    admin: Annotated[RestaurantUserRead, Depends(require_role(["admin"]))],
+) -> TableRead:
+    if admin.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    restaurant = db.scalar(select(Restaurant).where(Restaurant.id == rid))
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    existing = db.scalar(
+        select(RestaurantTable).where(
+            RestaurantTable.restaurant_id == rid,
+            RestaurantTable.number == body.number,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Table number already exists in this restaurant")
+    table = RestaurantTable(restaurant_id=rid, number=body.number, label=body.label)
+    db.add(table)
+    db.flush()
+    if restaurant.first_qr_generated_at is None:
+        restaurant.first_qr_generated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(table)
+    return TableRead.model_validate(table)
+
+
+@api_router.patch("/tables/{table_id}", response_model=TableRead)
+def update_table(
+    table_id: str,
+    body: TableUpdateBody,
+    db: DbDep,
+    admin: Annotated[RestaurantUserRead, Depends(require_role(["admin"]))],
+) -> TableRead:
+    table = db.scalar(select(RestaurantTable).where(RestaurantTable.id == table_id))
+    if table is None:
+        raise HTTPException(status_code=404, detail="Table not found")
+    if table.restaurant_id != admin.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if body.label is not None:
+        table.label = body.label
+    if body.is_active is not None:
+        table.is_active = body.is_active
+    db.commit()
+    db.refresh(table)
+    return TableRead.model_validate(table)
+
+
+@api_router.patch("/restaurants/{rid}", response_model=RestaurantRead)
+def update_restaurant(
+    rid: str,
+    body: RestaurantPatchBody,
+    db: DbDep,
+    admin: Annotated[RestaurantUserRead, Depends(require_role(["admin"]))],
+) -> RestaurantRead:
+    if admin.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    restaurant = db.scalar(select(Restaurant).where(Restaurant.id == rid))
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    if body.slug is not None and restaurant.first_qr_generated_at is not None:
+        raise HTTPException(status_code=409, detail="Slug is immutable after first QR generation.")
+    if body.name is not None:
+        restaurant.name = body.name
+    if body.slug is not None:
+        restaurant.slug = body.slug
+    db.commit()
+    db.refresh(restaurant)
+    return RestaurantRead.model_validate(restaurant)
+
+
+@api_router.get("/tables/{table_id}/qr", response_model=TableQRResponse)
+def get_table_qr(
+    table_id: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> TableQRResponse:
+    table = db.scalar(select(RestaurantTable).where(RestaurantTable.id == table_id))
+    if table is None:
+        raise HTTPException(status_code=404, detail="Table not found")
+    if table.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    restaurant = table.restaurant
+    if restaurant.first_qr_generated_at is None:
+        restaurant.first_qr_generated_at = datetime.now(timezone.utc)
+        db.commit()
+    return TableQRResponse(table_id=table_id, qr_url=f"/qr/{restaurant.slug}/{table.number}")
 
 
 # ── Category CRUD ─────────────────────────────────────────────────────────
