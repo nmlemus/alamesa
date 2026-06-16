@@ -10,7 +10,8 @@ const item1: MenuItemRead = {
   name: 'Hamburguesa',
   description: null,
   price_cents: 15000,
-  available: true,
+  is_available: true,
+  display_order: 1,
 };
 
 const item2: MenuItemRead = {
@@ -20,7 +21,8 @@ const item2: MenuItemRead = {
   name: 'Gaseosa',
   description: null,
   price_cents: 5000,
-  available: true,
+  is_available: true,
+  display_order: 2,
 };
 
 describe('formatCents', () => {
