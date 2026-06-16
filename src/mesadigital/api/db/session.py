@@ -24,3 +24,11 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def get_session_factory() -> sessionmaker[Session]:
+    """FastAPI dependency — returns the session factory.
+
+    Overridable in tests to inject a test-scoped engine.
+    """
+    return SessionLocal

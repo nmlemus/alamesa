@@ -1,4 +1,5 @@
-from collections.abc import Generator
+import asyncio
+from collections.abc import AsyncGenerator, Generator
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -8,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select, text
-from sqlalchemy.orm import Session, contains_eager
+from sqlalchemy.orm import Session, contains_eager, sessionmaker
+from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 
 from mesadigital.api.db.models import (
     Category,
@@ -21,7 +23,7 @@ from mesadigital.api.db.models import (
     RestaurantTable,
     RestaurantUser,
 )
-from mesadigital.api.db.session import get_db
+from mesadigital.api.db.session import get_db, get_session_factory
 from mesadigital.api.dependencies import TokenClaims, require_any_auth, require_auth, require_diner_auth
 from mesadigital.api.schemas import CategoryRead, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead
 from mesadigital.api.security import create_token, hash_password, verify_password
@@ -545,6 +547,65 @@ def get_order(
         total_cents=total_cents,
         item_count=item_count,
     )
+
+
+_SSE_POLL_INTERVAL = 1.0
+_SSE_KEEPALIVE_INTERVAL = 15.0
+
+
+@api_router.get("/restaurants/{rid}/orders/stream")
+async def stream_restaurant_orders(
+    rid: str,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+    sf: Annotated[sessionmaker[Session], Depends(get_session_factory)],
+) -> EventSourceResponse:
+    if staff.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    async def generator() -> AsyncGenerator[ServerSentEvent, None]:
+        # Use naive UTC so comparison with SQLite-returned naive datetimes works.
+        # PostgreSQL returns tz-aware values; both sides will be consistent because
+        # SQLAlchemy normalises them when DateTime(timezone=True) is used.
+        last_seen_at = datetime.utcnow()
+        last_keepalive_at = last_seen_at
+
+        try:
+            while True:
+                now = datetime.utcnow()
+
+                if (now - last_keepalive_at).total_seconds() >= _SSE_KEEPALIVE_INTERVAL:
+                    yield ServerSentEvent(comment="keepalive")
+                    last_keepalive_at = now
+
+                def _poll(ts: datetime = last_seen_at) -> list[Order]:
+                    with sf() as sess:
+                        return list(
+                            sess.scalars(
+                                select(Order)
+                                .where(
+                                    Order.restaurant_id == rid,
+                                    Order.updated_at > ts,
+                                )
+                                .order_by(Order.updated_at.asc())
+                            ).all()
+                        )
+
+                updated_orders = await asyncio.to_thread(_poll)
+
+                for order in updated_orders:
+                    yield ServerSentEvent(
+                        event="order_updated",
+                        data=OrderRead.model_validate(order).model_dump_json(),
+                        retry=3000,
+                    )
+                    if order.updated_at > last_seen_at:
+                        last_seen_at = order.updated_at
+
+                await asyncio.sleep(_SSE_POLL_INTERVAL)
+        except asyncio.CancelledError:
+            return
+
+    return EventSourceResponse(generator())
 
 
 @api_router.get("/restaurants/{rid}/orders", response_model=list[OrderRead])
