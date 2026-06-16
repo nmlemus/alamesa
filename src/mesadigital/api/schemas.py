@@ -74,6 +74,7 @@ class DinerRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    restaurant_id: str
     phone: str
     name: str
 

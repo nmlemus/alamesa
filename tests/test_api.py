@@ -97,13 +97,24 @@ def test_get_menu(seeded_client: TestClient) -> None:
     assert all(item["price_cents"] > 0 for item in all_items)
 
 
+def _get_diner_token(client: TestClient, slug: str = "demo") -> str:
+    restaurant = client.get(f"/api/public/restaurants/{slug}").json()
+    r = client.post(
+        f"/api/public/restaurants/{restaurant['id']}/diners/register",
+        json={"name": "Test Diner", "phone": "+34600999000"},
+    )
+    return r.json()["access_token"]
+
+
 def test_create_order(seeded_client: TestClient) -> None:
     menu = seeded_client.get("/api/restaurants/demo/menu").json()
     table_id = menu["tables"][0]["id"]
     item_id = menu["categories"][0]["items"][0]["id"]
+    token = _get_diner_token(seeded_client)
 
     r = seeded_client.post(
         "/api/orders",
+        headers={"Authorization": f"Bearer {token}"},
         json={
             "restaurant_slug": "demo",
             "table_id": table_id,
@@ -120,9 +131,11 @@ def test_order_full_lifecycle(seeded_client: TestClient) -> None:
     menu = seeded_client.get("/api/restaurants/demo/menu").json()
     table_id = menu["tables"][0]["id"]
     item_id = menu["categories"][0]["items"][0]["id"]
+    token = _get_diner_token(seeded_client)
 
     order_id = seeded_client.post(
         "/api/orders",
+        headers={"Authorization": f"Bearer {token}"},
         json={
             "restaurant_slug": "demo",
             "table_id": table_id,
@@ -142,9 +155,11 @@ def test_invalid_status_transition(seeded_client: TestClient) -> None:
     menu = seeded_client.get("/api/restaurants/demo/menu").json()
     table_id = menu["tables"][0]["id"]
     item_id = menu["categories"][0]["items"][0]["id"]
+    token = _get_diner_token(seeded_client)
 
     order_id = seeded_client.post(
         "/api/orders",
+        headers={"Authorization": f"Bearer {token}"},
         json={
             "restaurant_slug": "demo",
             "table_id": table_id,
