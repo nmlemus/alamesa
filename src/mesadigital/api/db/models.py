@@ -207,6 +207,9 @@ class Order(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     preparing_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
