@@ -191,12 +191,12 @@ def test_close_cross_restaurant_returns_403(
     assert r.status_code == 403
 
 
-def test_close_no_auth_returns_403(seeded_client: TestClient) -> None:
+def test_close_no_auth_returns_401(seeded_client: TestClient) -> None:
     diner_token = _get_diner_token(seeded_client)
     order_id = _create_order(seeded_client, diner_token)
 
     r = seeded_client.post(f"/api/orders/{order_id}/close")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 def test_close_diner_token_returns_401(seeded_client: TestClient) -> None:

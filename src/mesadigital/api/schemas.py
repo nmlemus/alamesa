@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from mesadigital.api.db.models import OrderStatus, RestaurantUserRole
+from shared.contracts import OrderStatus, RestaurantUserRole
 
 
 # ── Restaurant ────────────────────────────────────────────────────────────────

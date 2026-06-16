@@ -2,7 +2,6 @@ import uuid
 from collections.abc import Generator
 from unittest.mock import MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 
 from mesadigital.api.db.session import get_db

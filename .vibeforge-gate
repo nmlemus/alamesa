@@ -1,1 +1,1 @@
-pip install -e ".[dev]" -q && python -m pytest -q && pnpm install --no-frozen-lockfile && pnpm -r build && pnpm -r --if-present test
+pip install -e ".[dev]" -q && ruff check . && mypy src/ && python -m pytest -q && pnpm install --no-frozen-lockfile && pnpm -r build

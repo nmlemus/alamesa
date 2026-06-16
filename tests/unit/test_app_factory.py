@@ -39,7 +39,9 @@ def test_factory_ok_wildcard_cors_in_dev() -> None:
 def test_factory_healthz_route_registered() -> None:
     cfg = Settings()
     application = create_app(cfg)
-    paths = [route.path for route in application.routes]  # type: ignore[attr-defined]
+    # Robusto entre versiones de Starlette/FastAPI: el schema OpenAPI lista
+    # las rutas registradas (application.routes trae wrappers internos sin .path).
+    paths = application.openapi().get("paths", {})
     assert "/api/healthz" in paths
 
 

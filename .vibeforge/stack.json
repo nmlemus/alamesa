@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "stack_profile": "python-fastapi-react",
+  "base_image": "aiuda-factory:latest",
+  "toolchain": { "python": "3.11", "node": "20", "pnpm": "9" },
+  "verify": [
+    { "name": "deps", "run": "pip install -e \".[dev]\" -q" },
+    { "name": "lint", "run": "ruff check ." },
+    { "name": "typecheck", "run": "mypy src/" },
+    { "name": "test", "run": "python -m pytest -q" },
+    { "name": "build-web", "run": "pnpm install --no-frozen-lockfile && pnpm -r build" }
+  ]
+}

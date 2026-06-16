@@ -108,12 +108,12 @@ def test_list_categories_sorted_by_display_order(seeded_client: TestClient) -> N
     assert orders == sorted(orders)
 
 
-def test_list_categories_no_auth_returns_403(seeded_client: TestClient) -> None:
+def test_list_categories_no_auth_returns_401(seeded_client: TestClient) -> None:
     rid = _get_restaurant_id(seeded_client)
 
     r = seeded_client.get(f"/api/restaurants/{rid}/categories")
 
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 def test_list_categories_diner_token_returns_401(seeded_client: TestClient) -> None:
@@ -193,7 +193,7 @@ def test_create_category_missing_name_returns_422(seeded_client: TestClient) -> 
     assert r.status_code == 422
 
 
-def test_create_category_no_auth_returns_403(seeded_client: TestClient) -> None:
+def test_create_category_no_auth_returns_401(seeded_client: TestClient) -> None:
     rid = _get_restaurant_id(seeded_client)
 
     r = seeded_client.post(
@@ -201,7 +201,7 @@ def test_create_category_no_auth_returns_403(seeded_client: TestClient) -> None:
         json={"name": "Intruder"},
     )
 
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 def test_create_category_cross_tenant_returns_403(
@@ -297,7 +297,7 @@ def test_patch_category_cross_tenant_returns_403(
     assert r.status_code == 403
 
 
-def test_patch_category_no_auth_returns_403(seeded_client: TestClient) -> None:
+def test_patch_category_no_auth_returns_401(seeded_client: TestClient) -> None:
     token = _get_staff_token(seeded_client)
     rid = _get_restaurant_id(seeded_client)
     cat = _create_category(seeded_client, token, rid, name="No Auth Cat")
@@ -307,7 +307,7 @@ def test_patch_category_no_auth_returns_403(seeded_client: TestClient) -> None:
         json={"name": "No Auth"},
     )
 
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 # ── DELETE /api/categories/{id} ───────────────────────────────────────────────
@@ -381,11 +381,11 @@ def test_delete_category_cross_tenant_returns_403(
     assert r.status_code == 403
 
 
-def test_delete_category_no_auth_returns_403(seeded_client: TestClient) -> None:
+def test_delete_category_no_auth_returns_401(seeded_client: TestClient) -> None:
     token = _get_staff_token(seeded_client)
     rid = _get_restaurant_id(seeded_client)
     cat = _create_category(seeded_client, token, rid, name="No Auth Delete")
 
     r = seeded_client.delete(f"/api/categories/{cat['id']}")
 
-    assert r.status_code == 403
+    assert r.status_code == 401

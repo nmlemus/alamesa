@@ -1,17 +1,15 @@
 """Integration tests for POST /api/orders/{id}/confirm (ticket S3-03)."""
 import threading
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session as SASession
 
 from mesadigital.api.db.models import Order, Restaurant, RestaurantUser, RestaurantUserRole
-from mesadigital.api.security import create_token, hash_password
+from mesadigital.api.security import hash_password
 from shared.contracts import OrderStatus
 
-from datetime import timedelta
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -181,12 +179,12 @@ def test_confirm_order_cross_restaurant_returns_403(
     assert r.status_code == 403
 
 
-def test_confirm_order_no_auth_returns_403(seeded_client: TestClient) -> None:
+def test_confirm_order_no_auth_returns_401(seeded_client: TestClient) -> None:
     diner_token = _get_diner_token(seeded_client)
     order_id = _create_order(seeded_client, diner_token)
 
     r = seeded_client.post(f"/api/orders/{order_id}/confirm")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 def test_confirm_order_diner_token_returns_401(seeded_client: TestClient) -> None:
