@@ -152,6 +152,7 @@ class TableCreate(BaseModel):
 class TableUpdate(BaseModel):
     number: int | None = None
     label: str | None = None
+    is_active: bool | None = None
 
 
 class TableRead(BaseModel):
@@ -161,6 +162,7 @@ class TableRead(BaseModel):
     restaurant_id: str
     number: int
     label: str | None
+    is_active: bool
     qr_url: str
 
     @model_validator(mode="before")
@@ -175,6 +177,7 @@ class TableRead(BaseModel):
             "restaurant_id": data.restaurant_id,
             "number": data.number,
             "label": data.label,
+            "is_active": data.is_active,
             "qr_url": f"/qr/{slug}/{data.number}",
         }
 

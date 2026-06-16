@@ -138,11 +138,13 @@ def test_table_read_qr_url_from_orm_object() -> None:
         restaurant_id = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5"
         number = 5
         label = "Terraza"
+        is_active = True
         restaurant = FakeRestaurant()
 
     table_read = TableRead.model_validate(FakeTable())
     assert table_read.qr_url == "/qr/mi-restaurante/5"
     assert table_read.number == 5
+    assert table_read.is_active is True
 
 
 def test_table_read_qr_url_from_dict() -> None:
@@ -152,10 +154,12 @@ def test_table_read_qr_url_from_dict() -> None:
             "restaurant_id": "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
             "number": 3,
             "label": None,
+            "is_active": True,
             "qr_url": "/qr/slug/3",
         }
     )
     assert obj.qr_url == "/qr/slug/3"
+    assert obj.is_active is True
 
 
 # ── AC #7: from_attributes=True on all Read schemas ──────────────────────────
