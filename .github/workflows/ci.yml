@@ -98,6 +98,9 @@ jobs:
       - name: Typecheck
         run: pnpm --filter diner-app typecheck && pnpm --filter ops-dashboard typecheck
 
+      - name: Test
+        run: pnpm --filter diner-app test
+
       - name: Build
         run: pnpm --filter diner-app build && pnpm --filter ops-dashboard build
         env:
