@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Generator
 from unittest.mock import MagicMock
 
@@ -12,6 +13,12 @@ def test_health(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
+
+
+def test_x_request_id_header_present_and_valid(client: TestClient) -> None:
+    r = client.get("/health")
+    assert "X-Request-ID" in r.headers
+    uuid.UUID(r.headers["X-Request-ID"], version=4)
 
 
 def test_healthz_ok(client: TestClient) -> None:
