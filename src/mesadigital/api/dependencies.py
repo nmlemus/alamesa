@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,13 @@ _bearer = HTTPBearer()
 
 _DbDep = Annotated[Session, Depends(get_db)]
 _CredsDep = Annotated[HTTPAuthorizationCredentials, Depends(_bearer)]
+
+
+class TokenClaims(BaseModel):
+    token_type: str  # "staff" or "diner"
+    sub: str
+    restaurant_id: str
+    role: str | None = None
 
 
 def require_auth(credentials: _CredsDep, db: _DbDep) -> RestaurantUserRead:
@@ -39,6 +47,19 @@ def require_diner_auth(credentials: _CredsDep, db: _DbDep) -> DinerRead:
     if diner is None:
         raise HTTPException(status_code=401, detail="Diner not found")
     return DinerRead.model_validate(diner)
+
+
+def require_any_auth(credentials: _CredsDep) -> TokenClaims:
+    claims = decode_token(credentials.credentials)
+    token_type = claims.get("type")
+    if token_type not in ("staff", "diner"):
+        raise HTTPException(status_code=401, detail="Invalid token type")
+    return TokenClaims(
+        token_type=token_type,
+        sub=claims.get("sub", ""),
+        restaurant_id=claims.get("restaurant_id", ""),
+        role=claims.get("role"),
+    )
 
 
 def require_role(roles: list[str]) -> Callable[..., RestaurantUserRead]:
