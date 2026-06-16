@@ -1,7 +1,9 @@
+import logging
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+import sentry_sdk
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +25,7 @@ from mesadigital.api.db.models import (
 )
 from mesadigital.api.db.session import get_db
 from mesadigital.api.dependencies import TokenClaims, require_any_auth, require_auth, require_diner_auth, require_role
+from mesadigital.api.middleware import RequestLoggingMiddleware
 from mesadigital.api.schemas import CategoryRead, CategoryUpdate, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
@@ -776,6 +779,11 @@ def create_app(cfg: Settings | None = None) -> FastAPI:
     if cfg.ENVIRONMENT == "prod" and "*" in cfg.CORS_ORIGINS:
         raise ValueError("Wildcard CORS origin '*' is not allowed in production")
 
+    if cfg.SENTRY_DSN:
+        sentry_sdk.init(dsn=cfg.SENTRY_DSN, environment=cfg.ENVIRONMENT)
+
+    logging.getLogger("mesadigital.api.access").setLevel(logging.INFO)
+
     application = FastAPI(title="Mesa Digital API")
 
     application.add_middleware(
@@ -785,6 +793,7 @@ def create_app(cfg: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    application.add_middleware(RequestLoggingMiddleware)
 
     application.include_router(api_router, prefix="/api")
 

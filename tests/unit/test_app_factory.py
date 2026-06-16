@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 
 from mesadigital.api.main import create_app
@@ -52,3 +54,20 @@ def test_factory_api_prefix_on_all_api_routes() -> None:
     ]
     for path in api_paths:
         assert path.startswith("/api"), f"Route {path!r} lacks /api prefix"
+
+
+def test_sentry_not_initialized_without_dsn() -> None:
+    cfg = Settings(SENTRY_DSN=None)  # type: ignore[call-arg]
+    with patch("mesadigital.api.main.sentry_sdk") as mock_sentry:
+        create_app(cfg)
+    mock_sentry.init.assert_not_called()
+
+
+def test_sentry_initialized_with_dsn() -> None:
+    cfg = Settings(SENTRY_DSN="https://key@sentry.io/1")  # type: ignore[call-arg]
+    with patch("mesadigital.api.main.sentry_sdk") as mock_sentry:
+        create_app(cfg)
+    mock_sentry.init.assert_called_once_with(
+        dsn="https://key@sentry.io/1",
+        environment="dev",
+    )
