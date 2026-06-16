@@ -27,7 +27,7 @@ from mesadigital.api.db.session import get_db
 from mesadigital.api.db.store import validate_transition
 from mesadigital.api.dependencies import TokenClaims, require_any_auth, require_auth, require_diner_auth, require_role
 from mesadigital.api.middleware import RequestLoggingMiddleware
-from mesadigital.api.schemas import CategoryRead, CategoryUpdate, DinerRead, MenuItemRead, OrderRead, RestaurantRead, RestaurantUserRead, TableRead
+from mesadigital.api.schemas import CategoryRead, CategoryUpdate, DinerRead, MenuItemRead, MenuItemUpdate, OrderRead, RestaurantRead, RestaurantUserRead, TableRead
 from mesadigital.api.security import create_token, hash_password, verify_password
 from mesadigital.api.settings import Settings, settings as default_settings
 from shared.contracts import LEGAL_TRANSITIONS, OrderEventActorType, OrderStatus, RestaurantUserRole
@@ -1028,6 +1028,109 @@ def delete_category(
     if category.menu_items:
         raise HTTPException(status_code=409, detail="Category has menu items")
     db.delete(category)
+    db.commit()
+
+
+# ── MenuItem CRUD ─────────────────────────────────────────────────────────
+
+
+class MenuItemCreateBody(BaseModel):
+    category_id: str
+    name: str
+    description: str | None = None
+    price_cents: int = Field(gt=0)
+    is_available: bool = True
+    display_order: int = 0
+
+
+@api_router.get("/restaurants/{rid}/menu-items", response_model=list[MenuItemRead])
+def list_menu_items(
+    rid: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+    category_id: str | None = None,
+) -> list[MenuItemRead]:
+    if staff.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    q = select(MenuItem).where(MenuItem.restaurant_id == rid)
+    if category_id is not None:
+        q = q.where(MenuItem.category_id == category_id)
+    q = q.order_by(MenuItem.display_order)
+    items = db.scalars(q).all()
+    return [MenuItemRead.model_validate(item) for item in items]
+
+
+@api_router.post("/restaurants/{rid}/menu-items", response_model=MenuItemRead, status_code=201)
+def create_menu_item(
+    rid: str,
+    body: MenuItemCreateBody,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> MenuItemRead:
+    if staff.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    category = db.scalar(select(Category).where(Category.id == body.category_id))
+    if category is None or category.restaurant_id != rid:
+        raise HTTPException(status_code=422, detail="category_id does not belong to this restaurant")
+    item = MenuItem(
+        restaurant_id=rid,
+        category_id=body.category_id,
+        name=body.name,
+        description=body.description,
+        price_cents=body.price_cents,
+        is_available=body.is_available,
+        display_order=body.display_order,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return MenuItemRead.model_validate(item)
+
+
+@api_router.patch("/menu-items/{item_id}", response_model=MenuItemRead)
+def update_menu_item(
+    item_id: str,
+    body: MenuItemUpdate,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> MenuItemRead:
+    item = db.scalar(select(MenuItem).where(MenuItem.id == item_id))
+    if item is None:
+        raise HTTPException(status_code=404, detail="MenuItem not found")
+    if item.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if body.category_id is not None:
+        category = db.scalar(select(Category).where(Category.id == body.category_id))
+        if category is None or category.restaurant_id != staff.restaurant_id:
+            raise HTTPException(status_code=422, detail="category_id does not belong to this restaurant")
+        item.category_id = body.category_id
+    if body.name is not None:
+        item.name = body.name
+    if body.description is not None:
+        item.description = body.description
+    if body.price_cents is not None:
+        item.price_cents = body.price_cents
+    if body.is_available is not None:
+        item.is_available = body.is_available
+    if body.display_order is not None:
+        item.display_order = body.display_order
+    db.commit()
+    db.refresh(item)
+    return MenuItemRead.model_validate(item)
+
+
+@api_router.delete("/menu-items/{item_id}", status_code=204)
+def delete_menu_item(
+    item_id: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> None:
+    item = db.scalar(select(MenuItem).where(MenuItem.id == item_id))
+    if item is None:
+        raise HTTPException(status_code=404, detail="MenuItem not found")
+    if item.restaurant_id != staff.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db.delete(item)
     db.commit()
 
 
