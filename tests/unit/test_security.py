@@ -74,6 +74,7 @@ def _make_staff_user(
         restaurant_id=restaurant_id,
         email="staff@example.com",
         role=role,
+        is_active=True,
     )
 
 

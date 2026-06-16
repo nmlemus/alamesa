@@ -52,6 +52,7 @@ class RestaurantUserRead(BaseModel):
     restaurant_id: str
     email: str
     role: RestaurantUserRole
+    is_active: bool
     # hashed_password intentionally absent (structural field-level security)
 
 
