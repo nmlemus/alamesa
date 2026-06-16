@@ -580,6 +580,56 @@ def confirm_order(
     return OrderRead.model_validate(order)
 
 
+@api_router.post("/orders/{order_id}/cancel", response_model=OrderRead)
+def cancel_order(
+    order_id: str,
+    db: DbDep,
+    auth: Annotated[TokenClaims, Depends(require_any_auth)],
+) -> OrderRead:
+    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.restaurant_id != auth.restaurant_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    actor_type = (
+        OrderEventActorType.DINER if auth.token_type == "diner" else OrderEventActorType.STAFF
+    )
+
+    if actor_type == OrderEventActorType.DINER:
+        if order.diner_id != auth.sub:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        if order.status != OrderStatus.PENDING:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+    from_status = OrderStatus(order.status)
+    validate_transition(order, OrderStatus.CANCELLED, actor_type)
+
+    now = datetime.now(timezone.utc)
+    order.status = OrderStatus.CANCELLED
+    order.cancelled_at = now
+    order.updated_at = now
+
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            actor_type=actor_type,
+            actor_id=auth.sub,
+            from_status=from_status,
+            to_status=OrderStatus.CANCELLED,
+        )
+    )
+
+    try:
+        db.commit()
+    except StaleDataError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Order was modified concurrently")
+    db.refresh(order)
+    return OrderRead.model_validate(order)
+
+
 @api_router.get("/orders/{order_id}", response_model=OrderReadWithItems)
 def get_order(
     order_id: str,
