@@ -121,6 +121,7 @@ class MenuItemCreate(BaseModel):
 
 
 class MenuItemUpdate(BaseModel):
+    category_id: str | None = None
     name: str | None = None
     description: str | None = None
     price_cents: Annotated[int, Field(gt=0)] | None = None
