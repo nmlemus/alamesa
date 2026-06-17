@@ -329,6 +329,37 @@ def get_public_menu(slug: str, db: DbDep) -> list[CategoryRead]:
     ]
 
 
+@api_router.get("/public/restaurants/{slug}/tables/{number}", response_model=TableRead)
+def get_public_table(slug: str, number: int, db: DbDep) -> TableRead:
+    restaurant = db.scalar(
+        select(Restaurant).where(
+            Restaurant.slug == slug,
+            Restaurant.is_active == True,  # noqa: E712
+        )
+    )
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    table = db.scalar(
+        select(RestaurantTable).where(
+            RestaurantTable.restaurant_id == restaurant.id,
+            RestaurantTable.number == number,
+            RestaurantTable.is_active == True,  # noqa: E712
+        )
+    )
+    if table is None:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    return TableRead(
+        id=table.id,
+        restaurant_id=table.restaurant_id,
+        number=table.number,
+        label=table.label,
+        is_active=table.is_active,
+        qr_url=f"/qr/{slug}/{table.number}",
+    )
+
+
 @api_router.post("/diners/register", response_model=DinerResponse, status_code=201)
 def register_diner(body: DinerRegisterRequest, db: DbDep) -> DinerResponse:
     restaurant = db.scalar(

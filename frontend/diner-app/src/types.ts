@@ -71,6 +71,7 @@ export interface OrderItemRead {
   menu_item_id: string;
   quantity: number;
   unit_price_cents: number;
+  item_snapshot_name: string;
 }
 
 export interface OrderRead {
@@ -84,6 +85,8 @@ export interface OrderRead {
 
 export interface OrderReadWithItems extends OrderRead {
   items: OrderItemRead[];
+  total_cents: number;
+  item_count: number;
 }
 
 export interface CartItem {
