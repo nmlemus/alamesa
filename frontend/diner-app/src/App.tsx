@@ -3,6 +3,9 @@ import Root from './routes/Root'
 import QRLanding from './routes/QRLanding'
 import Registration from './routes/Registration'
 import MenuPage from './routes/MenuPage'
+import CartReview from './routes/CartReview'
+import OrderSubmitted from './routes/OrderSubmitted'
+import OrderTracker from './routes/OrderTracker'
 
 const router = createBrowserRouter([
   {
@@ -12,6 +15,9 @@ const router = createBrowserRouter([
       { index: true, element: <QRLanding /> },
       { path: 'registro', element: <Registration /> },
       { path: 'menu', element: <MenuPage /> },
+      { path: 'carrito', element: <CartReview /> },
+      { path: 'pedido-enviado/:orderId', element: <OrderSubmitted /> },
+      { path: 'seguimiento/:orderId', element: <OrderTracker /> },
     ],
   },
 ])

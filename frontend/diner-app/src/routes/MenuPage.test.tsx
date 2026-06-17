@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import MenuPage from './MenuPage'
 import { useMenu } from '../api/hooks'
+import { CartProvider } from '../context/CartContext'
 import type { CategoryRead } from '../types'
 
 vi.mock('../api/hooks', () => ({
@@ -73,11 +74,13 @@ const hiddenCategory: CategoryRead = {
 
 function renderMenuPage() {
   return render(
-    <MemoryRouter initialEntries={['/mi-restaurante/mesa/3/menu']}>
-      <Routes>
-        <Route path="/:slug/mesa/:tableNumber/menu" element={<MenuPage />} />
-      </Routes>
-    </MemoryRouter>
+    <CartProvider>
+      <MemoryRouter initialEntries={['/mi-restaurante/mesa/3/menu']}>
+        <Routes>
+          <Route path="/:slug/mesa/:tableNumber/menu" element={<MenuPage />} />
+        </Routes>
+      </MemoryRouter>
+    </CartProvider>
   )
 }
 

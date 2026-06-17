@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useMenu } from '../api/hooks'
-import { useCart } from '../hooks/useCart'
+import { useCartContext } from '../context/CartContext'
 import type { MenuItemRead } from '../types'
 import MenuCategoryTab from '../components/MenuCategoryTab'
 import MenuItemCard from '../components/MenuItemCard'
@@ -76,9 +76,10 @@ function MenuLoadingSkeleton() {
 }
 
 export default function MenuPage() {
-  const { slug } = useParams<{ slug: string }>()
+  const { slug, tableNumber } = useParams<{ slug: string; tableNumber: string }>()
+  const navigate = useNavigate()
   const { categories, isLoading } = useMenu(slug ?? '')
-  const cart = useCart()
+  const cart = useCartContext()
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [detailItem, setDetailItem] = useState<MenuItemRead | null>(null)
 
@@ -148,7 +149,11 @@ export default function MenuPage() {
       </div>
 
       {cart.item_count > 0 && (
-        <CartBar item_count={cart.item_count} total_cents={cart.total_cents} />
+        <CartBar
+          item_count={cart.item_count}
+          total_cents={cart.total_cents}
+          onClick={() => navigate(`/${slug}/mesa/${tableNumber}/carrito`)}
+        />
       )}
 
       {detailItem && (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, apiFetch } from './client'
-import type { CategoryRead, RestaurantRead } from '../types'
+import type { CategoryRead, RestaurantRead, TableRead } from '../types'
 
 export function useRestaurant(slug: string) {
   const [restaurant, setRestaurant] = useState<RestaurantRead | null>(null)
@@ -60,6 +60,37 @@ export function useMenu(slug: string) {
   }, [slug])
 
   return { categories, isLoading, error }
+}
+
+export function useTable(slug: string, tableNumber: string | undefined) {
+  const [table, setTable] = useState<TableRead | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<ApiError | null>(null)
+
+  useEffect(() => {
+    if (!tableNumber) return
+    let cancelled = false
+    setIsLoading(true)
+    setError(null)
+
+    apiFetch<TableRead>(`/api/public/restaurants/${slug}/tables/${tableNumber}`)
+      .then((data) => {
+        if (!cancelled) setTable(data)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled)
+          setError(err instanceof ApiError ? err : new ApiError(0, String(err)))
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [slug, tableNumber])
+
+  return { table, isLoading, error }
 }
 
 interface DinerTokenResponse {
