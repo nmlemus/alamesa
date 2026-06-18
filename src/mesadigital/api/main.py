@@ -1,12 +1,13 @@
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, AsyncGenerator
 
 import sentry_sdk
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.orm import Session, contains_eager
@@ -817,6 +818,49 @@ def get_order(
         items=items_out,
         total_cents=total_cents,
         item_count=item_count,
+    )
+
+
+_SSE_POLL_INTERVAL = 2.0
+_SSE_MAX_ITERATIONS: int | None = None  # None = infinite; set to finite in tests
+
+
+@api_router.get("/restaurants/{rid}/orders/stream")
+async def stream_restaurant_orders(
+    rid: str,
+    db: DbDep,
+    staff: Annotated[RestaurantUserRead, Depends(require_auth)],
+) -> StreamingResponse:
+    if staff.restaurant_id != rid:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    async def generate() -> AsyncGenerator[str, None]:
+        yield "retry: 3000\n\n"
+        seen: dict[str, str] = {}
+        iteration = 0
+
+        while _SSE_MAX_ITERATIONS is None or iteration < _SSE_MAX_ITERATIONS:
+            iteration += 1
+            orders = db.scalars(
+                select(Order)
+                .where(Order.restaurant_id == rid)
+                .order_by(Order.created_at.desc())
+                .limit(200)
+            ).all()
+
+            for order in orders:
+                status_str = str(order.status)
+                if seen.get(order.id) != status_str:
+                    seen[order.id] = status_str
+                    payload = OrderRead.model_validate(order).model_dump_json()
+                    yield f"event: order_updated\ndata: {payload}\n\n"
+
+            await asyncio.sleep(_SSE_POLL_INTERVAL)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
